@@ -766,3 +766,300 @@ table { border-collapse: collapse; width: 100%; }
   .content { padding: 10px; }
   .home-hint { display: none; }
 }
+
+/* ===== 功能增强：库存变动预览 / 时间线 / 任务 / 打印 / 通知 ===== */
+
+/* 库存变动预览 */
+.stock-preview {
+  margin-top: 12px;
+  border: 1px solid var(--primary-border);
+  background: var(--primary-soft);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.stock-preview.over {
+  border-color: #F5C2C2;
+  background: var(--danger-soft);
+}
+.stock-preview .sp-hd {
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--primary);
+  border-bottom: 1px solid var(--primary-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.stock-preview.over .sp-hd {
+  color: var(--danger);
+  border-bottom-color: #F5C2C2;
+}
+.stock-preview .sp-hd .sub {
+  font-weight: 400;
+  color: var(--ink4);
+  font-size: var(--fs-xs);
+}
+.stock-preview .sp-warn {
+  padding: 8px 12px;
+  font-size: var(--fs-xs);
+  color: var(--danger);
+  background: #fff;
+  border-top: 1px solid #F5C2C2;
+}
+.stock-preview tr.row-over td { background: var(--danger-soft); }
+
+/* 垂直时间轴 */
+.timeline {
+  position: relative;
+  margin: 10px 0 4px 8px;
+  padding-left: 18px;
+  border-left: 2px solid var(--primary-border);
+}
+.tl-item {
+  position: relative;
+  padding: 0 0 14px 8px;
+}
+.tl-item:last-child { padding-bottom: 2px; }
+.tl-dot {
+  position: absolute;
+  left: -25px;
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px var(--primary-border);
+}
+.tl-bd .tl-act {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+.tl-bd .tl-meta {
+  font-size: var(--fs-xs);
+  color: var(--ink3);
+  margin-top: 2px;
+}
+.tl-bd .tl-meta b { color: var(--ink2); font-weight: 600; }
+
+/* 签字栏（打印） */
+.sign-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line-strong);
+  font-size: var(--fs-sm);
+  color: var(--ink2);
+}
+
+/* 通知条 */
+.notice-warn {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: var(--warning-soft);
+  border: 1px solid #F0D9A8;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+  color: var(--warning);
+  line-height: 1.6;
+}
+.notice-info {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+  color: var(--primary);
+  line-height: 1.6;
+}
+
+/* 实训任务横幅 */
+.task-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.task-banner .tb-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: var(--fs-sm);
+  color: var(--ink2);
+}
+.task-banner .tb-right { display: flex; gap: 8px; }
+.tb-bar {
+  width: 160px;
+  height: 8px;
+  background: var(--bar2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.tb-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 4px;
+  transition: width 0.25s;
+}
+
+/* 任务卡 */
+.task-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.task-progress .tp-bar {
+  flex: 1;
+  height: 10px;
+  background: var(--bar2);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.task-progress .tp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--success));
+  border-radius: 5px;
+}
+.task-progress .tp-text {
+  font-size: var(--fs-sm);
+  color: var(--ink2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.task-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.task-card.done {
+  border-color: #B7E4D0;
+  background: var(--success-soft);
+}
+.task-card .tc-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.task-card .tc-id {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: var(--fs-xs);
+  background: var(--primary-soft);
+  padding: 1px 8px;
+  border-radius: var(--r-sm);
+}
+.task-card.done .tc-id {
+  color: var(--success);
+  background: #fff;
+}
+.task-card .tc-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  color: transparent;
+  background: #fff;
+}
+.task-card .tc-check.on {
+  border-color: var(--success);
+  background: var(--success);
+  color: #fff;
+}
+.task-card .tc-title {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+.task-card .tc-desc {
+  font-size: var(--fs-xs);
+  color: var(--ink3);
+  line-height: 1.5;
+  flex: 1;
+}
+
+/* 汇总合计行 */
+.tbl tr.sum-row td {
+  background: var(--primary-soft);
+  font-weight: 700;
+  color: var(--primary);
+  border-top: 2px solid var(--primary-border);
+}
+
+@media (max-width: 1100px) {
+  .task-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 680px) {
+  .task-grid { grid-template-columns: 1fr; }
+  .task-banner { flex-direction: column; align-items: flex-start; }
+}
+
+/* ===== 打印：隐藏菜单/侧栏/按钮，只留单据 ===== */
+@media print {
+  body { overflow: visible !important; background: #fff; }
+  .app-title,
+  .menubar,
+  .subbar,
+  .side,
+  .statusbar,
+  .tour,
+  .mask,
+  .page-hd .btn-back,
+  .no-print,
+  .box-ft,
+  .stock-preview .sp-warn {
+    display: none !important;
+  }
+  #app { height: auto !important; display: block !important; }
+  .shell { display: block !important; }
+  .content {
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+  .box {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+  .box-hd {
+    border-bottom: 2px solid var(--ink) !important;
+    font-size: 16px !important;
+  }
+  .tbl th {
+    background: #eee !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sign-row {
+    display: flex !important;
+    margin-top: 32px;
+    page-break-inside: avoid;
+  }
+  .print-doc { page-break-inside: auto; }
+}

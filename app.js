@@ -231,16 +231,104 @@
       timeline: [{ act: "创建草稿", who: "文员小陈", at: Date.now() - 1800000 }],
     };
 
+    /* 种子：一笔销售退货、一笔采购退货、一笔盘点 */
+    const xsth1 = {
+      id: "XSTH1",
+      no: "XSTH-" + fmtD(today).replace(/-/g, "") + "-0001",
+      date: daysAgo(2),
+      customerId: "C001",
+      soId: "SO1",
+      soNo: so1.no,
+      lines: [{ productId: "P001", qty: 5, price: 12.8 }],
+      status: "已退货",
+      createdBy: "文员小陈",
+      createdAt: Date.now() - 86400000 * 2,
+      note: "客户拆包破损退货",
+      timeline: [
+        { act: "录入退货草稿", who: "文员小陈", at: Date.now() - 86400000 * 2 },
+        { act: "提交待审", who: "文员小陈", at: Date.now() - 86400000 * 2 + 600000 },
+        { act: "模拟仓管确认（库存回加）", who: "仓管老黄", at: Date.now() - 86400000 * 2 + 1200000 },
+      ],
+    };
+    xsth1.lines.forEach((l) => {
+      const p = products.find((x) => x.id === l.productId);
+      stock[l.productId] += l.qty;
+      moves.push({
+        id: uid("M"), date: xsth1.date, type: "销售退货",
+        productCode: p.code, productName: p.name, unit: p.unit,
+        qty: l.qty, refNo: xsth1.no, operator: "仓管老黄", note: "退货入库",
+      });
+    });
+
+    const cgth1 = {
+      id: "CGTH1",
+      no: "CGTH-" + fmtD(today).replace(/-/g, "") + "-0001",
+      date: daysAgo(1),
+      supplierId: "S003",
+      poId: "PO2",
+      poNo: po2.no,
+      lines: [{ productId: "P008", qty: 6, price: 3.5 }],
+      status: "已退货",
+      createdBy: "文员小陈",
+      createdAt: Date.now() - 86400000,
+      note: "到货破损退回供应商",
+      timeline: [
+        { act: "录入退货草稿", who: "文员小陈", at: Date.now() - 86400000 },
+        { act: "提交待审", who: "文员小陈", at: Date.now() - 86400000 + 600000 },
+        { act: "模拟仓管确认（库存扣减）", who: "仓管老黄", at: Date.now() - 86400000 + 1200000 },
+      ],
+    };
+    cgth1.lines.forEach((l) => {
+      const p = products.find((x) => x.id === l.productId);
+      stock[l.productId] = Math.max(0, stock[l.productId] - l.qty);
+      moves.push({
+        id: uid("M"), date: cgth1.date, type: "采购退货",
+        productCode: p.code, productName: p.name, unit: p.unit,
+        qty: -l.qty, refNo: cgth1.no, operator: "仓管老黄", note: "退货出库",
+      });
+    });
+
+    const pdd1 = {
+      id: "PDD1",
+      no: "PDD-" + fmtD(today).replace(/-/g, "") + "-0001",
+      date: daysAgo(15),
+      warehouse: "主仓",
+      status: "已盘点",
+      note: "月末例行盘点，差异已由仓管确认",
+      createdBy: "文员小陈",
+      createdAt: Date.now() - 86400000 * 15,
+      lines: [
+        { productId: "P001", bookQty: 80, realQty: 80 },
+        { productId: "P004", bookQty: 100, realQty: 98 },
+      ],
+      timeline: [
+        { act: "录入盘点单", who: "文员小陈", at: Date.now() - 86400000 * 15 },
+        { act: "提交待审", who: "文员小陈", at: Date.now() - 86400000 * 15 + 600000 },
+        { act: "模拟仓管确认（差异入账）", who: "仓管老黄", at: Date.now() - 86400000 * 15 + 3600000 },
+      ],
+    };
+
+    const logs = [
+      { id: uid("LG"), at: Date.now() - 86400000 * 15, who: "文员小陈", act: "盘点确认", detail: "盘点单 " + pdd1.no },
+      { id: uid("LG"), at: Date.now() - 86400000 * 2, who: "文员小陈", act: "销售退货确认", detail: "退货单 " + xsth1.no },
+      { id: uid("LG"), at: Date.now() - 86400000, who: "文员小陈", act: "采购退货确认", detail: "退货单 " + cgth1.no },
+    ];
+
     return {
-      v: 1,
+      v: 2,
       products,
       suppliers,
       customers,
       stock,
       purchases: [po1, po2, po3],
       sales: [so1, so2, so3],
+      salesReturns: [xsth1],
+      purchaseReturns: [cgth1],
+      stockChecks: [pdd1],
       moves,
-      counters: { po: 3, so: 3 },
+      logs,
+      counters: { po: 3, so: 3, xsth: 1, cgth: 1, pdd: 1 },
+      flags: { exportedInv: false },
       user: { name: "文员小陈", role: "商务文员" },
       company: "广西老街坊商贸有限公司",
       tourOn: true,
@@ -249,22 +337,63 @@
     };
   }
 
+  function migrate(d) {
+    if (!d.salesReturns) d.salesReturns = [];
+    if (!d.purchaseReturns) d.purchaseReturns = [];
+    if (!d.stockChecks) d.stockChecks = [];
+    if (!d.logs) d.logs = [];
+    if (!d.counters) d.counters = { po: 3, so: 3, xsth: 0, cgth: 0, pdd: 0 };
+    if (d.counters.xsth == null) d.counters.xsth = 0;
+    if (d.counters.cgth == null) d.counters.cgth = 0;
+    if (d.counters.pdd == null) d.counters.pdd = 0;
+    if (!d.flags) d.flags = { exportedInv: false };
+    d.v = 2;
+    return d;
+  }
+
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const d = JSON.parse(raw);
-        if (d && d.v === 1) return d;
+        if (d && (d.v === 1 || d.v === 2)) return migrate(d);
       }
     } catch (e) {}
     const d = seed();
-    localStorage.setItem(KEY, JSON.stringify(d));
+    try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) {}
     return d;
   }
 
   let db = load();
+
+  function dbSizeKB() {
+    try { return Math.round(JSON.stringify(db).length / 1024); } catch (e) { return 0; }
+  }
+
   function save() {
-    localStorage.setItem(KEY, JSON.stringify(db));
+    try {
+      localStorage.setItem(KEY, JSON.stringify(db));
+    } catch (e) {
+      alertBox(
+        "warn",
+        "本地存储写入失败",
+        "浏览器 localStorage 空间不足或被禁用，本次修改可能无法持久保存。",
+        "当前数据约 " + dbSizeKB() + " KB。请导出所需报表备份后，点侧栏「重置演示数据」释放空间，或清理浏览器存储后重试。"
+      );
+    }
+  }
+
+  /* 操作日志：新建 / 提交 / 退货确认 / 导出 / 重置 等关键动作 */
+  function logAction(act, detail) {
+    if (!db.logs) db.logs = [];
+    db.logs.unshift({
+      id: uid("LG"),
+      at: Date.now(),
+      who: (db.user && db.user.name) || "文员",
+      act: act,
+      detail: detail || "",
+    });
+    if (db.logs.length > 200) db.logs.length = 200;
   }
 
   /* ---------- 路由 / 状态 ---------- */
@@ -291,6 +420,14 @@
       ledFrom: daysAgo(30),
       ledTo: fmtD(today),
       ledQ: "",
+      xsthStatus: "",
+      xsthQ: "",
+      cgthStatus: "",
+      cgthQ: "",
+      invFrom: daysAgo(30),
+      invTo: fmtD(today),
+      recType: "supplier",
+      recId: "",
     },
     // 编辑态
     editProduct: null,
@@ -298,6 +435,9 @@
     editCustomer: null,
     poForm: null,
     soForm: null,
+    xsthForm: null,
+    cgthForm: null,
+    pddForm: null,
     viewDoc: null, // {kind, doc}
     selectedId: null,
   };
@@ -377,9 +517,11 @@
 
   function existingLineIds(form) {
     if (!form || !form.id) return new Set();
-    const src = form.kind === "so"
-      ? db.sales.find((x) => x.id === form.id)
-      : db.purchases.find((x) => x.id === form.id);
+    let src = null;
+    if (form.kind === "so") src = db.sales.find((x) => x.id === form.id);
+    else if (form.kind === "xsth") src = (db.salesReturns || []).find((x) => x.id === form.id);
+    else if (form.kind === "cgth") src = (db.purchaseReturns || []).find((x) => x.id === form.id);
+    else src = db.purchases.find((x) => x.id === form.id);
     return new Set((src && src.lines ? src.lines : []).map((l) => l.productId));
   }
 
@@ -455,6 +597,9 @@
     state.editCustomer = null;
     state.poForm = null;
     state.soForm = null;
+    state.xsthForm = null;
+    state.cgthForm = null;
+    state.pddForm = null;
     state.viewDoc = null;
     state.selectedId = null;
     render();
@@ -475,7 +620,11 @@
   ];
 
   const SIDE = {
-    home: [{ id: "home", label: "我的工作台" }],
+    home: [
+      { id: "home", label: "我的工作台" },
+      { id: "tasks", label: "实训任务" },
+      { id: "sys-logs", label: "操作日志" },
+    ],
     base: [
       { id: "base-products", label: "商品档案" },
       { id: "base-suppliers", label: "供应商资料" },
@@ -484,25 +633,29 @@
     purchase: [
       { id: "purchase-list", label: "采购订单" },
       { id: "purchase-in", label: "采购入库单" },
+      { id: "purchase-return", label: "采购退货" },
     ],
     sales: [
       { id: "sales-list", label: "销售订单" },
       { id: "sales-out", label: "销售出库单" },
+      { id: "sales-return", label: "销售退货" },
     ],
     stock: [
       { id: "stock-query", label: "实时库存" },
       { id: "stock-alert", label: "库存预警" },
       { id: "stock-ledger", label: "库存台账" },
       { id: "stock-move", label: "出入库流水" },
-      { id: "stock-check", label: "盘点单查看" },
+      { id: "stock-check", label: "盘点单" },
     ],
     rpt: [
       { id: "rpt-center", label: "业务报表" },
+      { id: "rpt-invsum", label: "进销存汇总" },
+      { id: "rpt-reconcile", label: "往来对账单" },
     ],
   };
 
   function menuOf(route) {
-    if (route === "home") return "home";
+    if (route === "home" || route === "tasks" || route === "sys-logs") return "home";
     if (route.startsWith("base-")) return "base";
     if (route.startsWith("purchase")) return "purchase";
     if (route.startsWith("sales")) return "sales";
@@ -514,19 +667,25 @@
   function pageTitle(route) {
     const map = {
       home: "我的工作台",
+      tasks: "实训任务（L1–L6）",
+      "sys-logs": "操作日志",
       "base-products": "商品档案",
       "base-suppliers": "供应商资料",
       "base-customers": "客户资料",
       "purchase-list": "采购订单",
       "purchase-in": "采购入库单",
+      "purchase-return": "采购退货单",
       "sales-list": "销售订单",
       "sales-out": "销售出库单",
+      "sales-return": "销售退货单",
       "stock-query": "实时库存查询",
       "stock-alert": "库存预警",
       "stock-ledger": "库存台账",
       "stock-move": "出入库流水查询",
-      "stock-check": "库存盘点单（只读）",
+      "stock-check": "库存盘点单",
       "rpt-center": "业务报表中心",
+      "rpt-invsum": "进销存汇总表",
+      "rpt-reconcile": "往来对账单",
     };
     return map[route] || "系统";
   }
@@ -562,6 +721,268 @@
     const d = fmtD(today).replace(/-/g, "");
     return "XSCK-" + d + "-" + pad(db.counters.so, 4);
   }
+  function peekXsthNo() {
+    const d = fmtD(today).replace(/-/g, "");
+    return "XSTH-" + d + "-" + pad((db.counters.xsth || 0) + 1, 4);
+  }
+  function nextXsthNo() {
+    db.counters.xsth = (db.counters.xsth || 0) + 1;
+    const d = fmtD(today).replace(/-/g, "");
+    return "XSTH-" + d + "-" + pad(db.counters.xsth, 4);
+  }
+  function peekCgthNo() {
+    const d = fmtD(today).replace(/-/g, "");
+    return "CGTH-" + d + "-" + pad((db.counters.cgth || 0) + 1, 4);
+  }
+  function nextCgthNo() {
+    db.counters.cgth = (db.counters.cgth || 0) + 1;
+    const d = fmtD(today).replace(/-/g, "");
+    return "CGTH-" + d + "-" + pad(db.counters.cgth, 4);
+  }
+  function peekPddNo() {
+    const d = fmtD(today).replace(/-/g, "");
+    return "PDD-" + d + "-" + pad((db.counters.pdd || 0) + 1, 4);
+  }
+  function nextPddNo() {
+    db.counters.pdd = (db.counters.pdd || 0) + 1;
+    const d = fmtD(today).replace(/-/g, "");
+    return "PDD-" + d + "-" + pad(db.counters.pdd, 4);
+  }
+
+  /* 已出库/已入库数量（含部分出库按流水统计） */
+  function soShippedQty(so, productId) {
+    if (!so) return 0;
+    const p = productById(productId);
+    if (!p) return 0;
+    const fromMoves = (db.moves || [])
+      .filter((m) => m.refNo === so.no && m.type === "销售出库" && m.productCode === p.code)
+      .reduce((s, m) => s + Math.abs(m.qty), 0);
+    if (fromMoves > 0) return fromMoves;
+    if (so.status === "已出库") {
+      const l = (so.lines || []).find((x) => x.productId === productId);
+      return l ? l.qty : 0;
+    }
+    return 0;
+  }
+  function poReceivedQty(po, productId) {
+    if (!po) return 0;
+    const p = productById(productId);
+    if (!p) return 0;
+    const fromMoves = (db.moves || [])
+      .filter((m) => m.refNo === po.no && m.type === "采购入库" && m.productCode === p.code)
+      .reduce((s, m) => s + Math.abs(m.qty), 0);
+    if (fromMoves > 0) return fromMoves;
+    if (po.status === "已入库") {
+      const l = (po.lines || []).find((x) => x.productId === productId);
+      return l ? l.qty : 0;
+    }
+    return 0;
+  }
+  function soReturnedQty(soId, productId, excludeId) {
+    return (db.salesReturns || [])
+      .filter((r) => r.status === "已退货" && r.soId === soId && r.id !== excludeId)
+      .reduce((s, r) => s + (r.lines || []).filter((l) => l.productId === productId).reduce((a, l) => a + l.qty, 0), 0);
+  }
+  function poReturnedQty(poId, productId, excludeId) {
+    return (db.purchaseReturns || [])
+      .filter((r) => r.status === "已退货" && r.poId === poId && r.id !== excludeId)
+      .reduce((s, r) => s + (r.lines || []).filter((l) => l.productId === productId).reduce((a, l) => a + l.qty, 0), 0);
+  }
+  function maxReturnableSO(so, productId, excludeId) {
+    return Math.max(0, soShippedQty(so, productId) - soReturnedQty(so.id, productId, excludeId));
+  }
+  function maxReturnablePO(po, productId, excludeId) {
+    return Math.max(0, poReceivedQty(po, productId) - poReturnedQty(po.id, productId, excludeId));
+  }
+
+  /* 库存变动预览：商品 → 当前库存 → 本单变动 → 变动后 */
+  function stockPreviewRows(lines, dir) {
+    const map = {};
+    (lines || []).forEach((l) => {
+      if (!l.productId) return;
+      if (!map[l.productId]) map[l.productId] = { productId: l.productId, qty: 0 };
+      map[l.productId].qty += Number(l.qty) || 0;
+    });
+    return Object.keys(map).map((pid) => {
+      const p = productById(pid);
+      const cur = Number(db.stock[pid] || 0);
+      const delta = dir * map[pid].qty;
+      const after = cur + delta;
+      return {
+        pid, code: p ? p.code : pid, name: p ? p.name : pid, unit: p ? p.unit : "",
+        cur, delta, after, over: after < 0,
+      };
+    });
+  }
+
+  function stockPreviewHtml(lines, dir, title) {
+    const rows = stockPreviewRows(lines, dir);
+    const warn = rows.some((r) => r.over);
+    return `
+      <div class="stock-preview ${warn ? "over" : ""}">
+        <div class="sp-hd">${esc(title || "库存变动预览（防超卖）")}
+          <span class="sub">${dir > 0 ? "入库方向：变动后增加" : "出库方向：变动后减少"}；提交前校验不允许负库存</span>
+        </div>
+        <div class="tbl-wrap" style="border:none">
+          <table class="tbl">
+            <thead><tr><th>商品</th><th class="right">当前库存</th><th class="right">本单变动</th><th class="right">变动后</th><th>提示</th></tr></thead>
+            <tbody>
+              ${rows.length
+                ? rows.map((r) => `<tr class="${r.over ? "row-over" : ""}">
+                    <td class="mono">${esc(r.code)} ${esc(r.name)}</td>
+                    <td class="right num">${r.cur}</td>
+                    <td class="right num">${r.delta > 0 ? "+" : ""}${r.delta}</td>
+                    <td class="right num ${r.over ? "st-low" : ""}">${r.after}</td>
+                    <td>${r.over ? '<span class="st st-low">将超卖</span>' : '<span class="st st-ok">正常</span>'}</td>
+                  </tr>`).join("")
+                : `<tr><td colspan="5" class="tbl-empty">请先选择商品与数量</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+        ${warn ? `<div class="sp-warn">存在「将超卖」行：销售出库后库存为负。系统不允许负库存，请减少数量或先办理入库。</div>` : ""}
+      </div>`;
+  }
+
+  function validateNoOverSell(lines) {
+    const rows = stockPreviewRows(lines, -1);
+    const bad = rows.filter((r) => r.over);
+    if (bad.length) {
+      alertBox("err", "不允许负库存（将超卖）",
+        bad.map((r) => r.name + " 变动后 " + r.after).join("；"),
+        "文员权限下提交销售出库不允许造成负库存。请减少数量，或先完成采购入库。");
+      return false;
+    }
+    return true;
+  }
+
+  /* 垂直时间轴 */
+  function timelineHtml(timeline) {
+    const items = timeline || [];
+    if (!items.length) return '<div class="tbl-empty">暂无操作记录</div>';
+    return '<div class="timeline">' + items.map((t) => `
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-bd">
+          <div class="tl-act">${esc(t.act)}</div>
+          <div class="tl-meta"><b>${esc(t.who)}</b> · ${fmtDT(t.at)}</div>
+        </div>
+      </div>`).join("") + '</div>';
+  }
+
+  /* 实训任务自动判定 */
+  function taskList() {
+    const hasPO = db.purchases.some((x) => x.status === "已入库");
+    const hasSO = db.sales.some((x) => x.status === "已出库" || x.status === "部分出库");
+    const hasReturn =
+      (db.salesReturns || []).some((x) => x.status === "已退货") ||
+      (db.purchaseReturns || []).some((x) => x.status === "已退货");
+    const hasCheck = (db.stockChecks || []).length > 0;
+    const exported = !!(db.flags && db.flags.exportedInv);
+    return [
+      { id: "L1", title: "商品 + 供应商建档", desc: "在基础资料中建立商品档案与供应商资料", done: db.products.length > 0 && db.suppliers.length > 0, nav: "base-products" },
+      { id: "L2", title: "采购入库", desc: "录入采购单并完成入库（模拟仓管确认）", done: hasPO, nav: "purchase-list" },
+      { id: "L3", title: "销售出库", desc: "录入销售单并完成出库（注意防超卖）", done: hasSO, nav: "sales-list" },
+      { id: "L4", title: "销售退货", desc: "开销售退货单并模拟仓管确认，库存回加", done: hasReturn, nav: "sales-return" },
+      { id: "L5", title: "盘点", desc: "录入盘点单提交待审 / 模拟仓管确认差异", done: hasCheck, nav: "stock-check" },
+      { id: "L6", title: "导出进销存汇总", desc: "在报表中心导出进销存汇总 CSV", done: exported, nav: "rpt-invsum" },
+    ];
+  }
+
+  /* 进销存汇总计算 */
+  function invSumRows(from, to) {
+    /* 期末 = 截止日(含)前全部流水累计；
+       期内列只统计 [from, to]；期初 = 期末 − 期内净变动，
+       保证 期初 + 采购入库 − 采购退货 − 销售出库 + 销售退货 = 期末 恒等 */
+    const map = {};
+    db.products.forEach((p) => {
+      map[p.id] = {
+        productId: p.id, code: p.code, name: p.name, unit: p.unit,
+        openQty: 0, poIn: 0, poOut: 0, soOut: 0, soIn: 0, endQty: 0,
+      };
+    });
+    (db.moves || []).forEach((m) => {
+      const p = db.products.find((x) => x.code === m.productCode || x.name === m.productName);
+      const rec = p && map[p.id];
+      if (!rec) return;
+      const d = m.date;
+      const q = Number(m.qty) || 0;
+      if (to && d > to) return;
+      rec.endQty += q;
+      if (from && d < from) return;
+      if (m.type === "采购入库") rec.poIn += q;
+      else if (m.type === "采购退货") rec.poOut += -q;
+      else if (m.type === "销售出库") rec.soOut += -q;
+      else if (m.type === "销售退货") rec.soIn += q;
+    });
+    Object.keys(map).forEach((k) => {
+      const r = map[k];
+      const net = r.poIn - r.poOut - r.soOut + r.soIn;
+      r.openQty = r.endQty - net;
+    });
+    return db.products.map((p) => map[p.id]);
+  }
+
+  function invSumTotal(rows) {
+    const t = { openQty: 0, poIn: 0, poOut: 0, soOut: 0, soIn: 0, endQty: 0 };
+    rows.forEach((r) => {
+      t.openQty += r.openQty; t.poIn += r.poIn; t.poOut += r.poOut;
+      t.soOut += r.soOut; t.soIn += r.soIn; t.endQty += r.endQty;
+    });
+    return t;
+  }
+
+  /* 往来对账：供应商采购额/退货额；客户销售额/退货额/模拟回款 */
+  function reconcileRows(type, partyId) {
+    const rows = [];
+    if (type === "supplier") {
+      const list = partyId ? db.suppliers.filter((s) => s.id === partyId) : db.suppliers;
+      list.forEach((s) => {
+        let buy = 0, ret = 0, pay = 0;
+        db.purchases.forEach((po) => {
+          if (po.supplierId !== s.id) return;
+          if (po.status === "已入库" || po.status === "待审核" || po.status === "已审核") {
+            buy += lineAmount(po.lines);
+            // 模拟回款：已入库单按 70% 模拟付款
+            if (po.status === "已入库") pay += round2(lineAmount(po.lines) * 0.7);
+          }
+        });
+        (db.purchaseReturns || []).forEach((r) => {
+          if (r.supplierId === s.id && r.status === "已退货") ret += lineAmount(r.lines);
+        });
+        rows.push({
+          code: s.code, name: s.name,
+          buy: round2(buy), ret: round2(ret), pay: round2(pay),
+          bal: round2(buy - ret - pay),
+        });
+      });
+    } else {
+      const list = partyId ? db.customers.filter((c) => c.id === partyId) : db.customers;
+      list.forEach((c) => {
+        let sell = 0, ret = 0, recv = 0;
+        db.sales.forEach((so) => {
+          if (so.customerId !== c.id) return;
+          if (so.status !== "草稿") {
+            sell += lineAmount(so.lines);
+            if (so.status === "已出库" || so.status === "部分出库") recv += round2(lineAmount(so.lines) * 0.7);
+          }
+        });
+        (db.salesReturns || []).forEach((r) => {
+          if (r.customerId === c.id && r.status === "已退货") ret += lineAmount(r.lines);
+        });
+        rows.push({
+          code: c.code, name: c.name,
+          sell: round2(sell), ret: round2(ret), recv: round2(recv),
+          bal: round2(sell - ret - recv),
+        });
+      });
+    }
+    return rows;
+  }
+
+  /* 打印 */
+  function printDoc() {
+    window.print();
+  }
 
   function lowStockList() {
     return db.products
@@ -578,12 +999,11 @@
     if (st === "待审核") return "st-pending";
     if (st === "待出库") return "st-wait";
     if (st === "已审核") return "st-approved";
-    if (st === "已入库" || st === "已出库") return "st-executed";
+    if (st === "已入库" || st === "已出库" || st === "已退货" || st === "已盘点") return "st-executed";
     if (st === "部分出库") return "st-partial";
     if (st === "已作废") return "st-cancelled";
     return "st-draft";
   }
-
   /* ---------- 商品 CRUD ---------- */
   function openNewProduct() {
     state.editProduct = {
@@ -800,6 +1220,7 @@
       db.purchases.unshift(rec);
     }
     state.poForm = null;
+    logAction(status === "draft" ? "新建采购草稿" : "提交采购单", rec.no + " ¥" + money(lineAmount(rec.lines)));
     save();
     if (status === "draft") {
       alertBox("ok", "系统提示", "单据已保存为草稿", "单号：" + rec.no + "。草稿可继续编辑，提交后需财务审核。");
@@ -807,7 +1228,6 @@
       alertBox("ok", "保存并提交成功", "采购单已提交财务审核", "单号：" + rec.no + "。你无法审核，请等待财务账号处理。");
     }
   }
-
   function tryApprove() {
     noPermission("审核单据 / 生效单据");
   }
@@ -848,6 +1268,7 @@
     if (cus && !cus.active) return alertBox("err", "系统提示", "所选客户已停用", "请更换客户后再保存。");
     const lines = validateLines(f.lines, "so", existingLineIds({ id: f.id, kind: "so" }));
     if (!lines) return;
+    if (status !== "draft" && !validateNoOverSell(lines)) return;
 
     const rec = {
       id: f.id || uid("SO"),
@@ -873,6 +1294,7 @@
       db.sales.unshift(rec);
     }
     state.soForm = null;
+    logAction(status === "draft" ? "新建销售草稿" : "提交销售单", rec.no + " ¥" + money(lineAmount(rec.lines)));
     save();
     if (status === "draft") {
       alertBox("ok", "系统提示", "销售单已保存为草稿", "单号：" + rec.no);
@@ -892,6 +1314,8 @@
     a.download = filename;
     a.click();
     URL.revokeObjectURL(a.href);
+    logAction("导出报表", filename + "（" + rows.length + " 行）");
+    save();
     alertBox("ok", "导出成功", "报表已导出", filename + "（UTF-8 带 BOM，可用 Excel 直接打开）。导出内容与当前页面筛选结果一致。");
   }
 
@@ -1015,6 +1439,25 @@
   }
 
   /* ---------- 页面：工作台 ---------- */
+  function taskBannerHtml() {
+    if (db.taskGuideClosed) return "";
+    const tasks = taskList();
+    const done = tasks.filter((t) => t.done).length;
+    const pct = Math.round((done / tasks.length) * 100);
+    return `
+      <div class="task-banner">
+        <div class="tb-left">
+          <b>实训任务 L1–L6</b>
+          <div class="tb-bar"><div class="tb-fill" style="width:${pct}%"></div></div>
+          <span>已完成 ${done}/${tasks.length}</span>
+        </div>
+        <div class="tb-right">
+          <button class="btn btn-sm btn-primary" data-nav="tasks">查看任务卡</button>
+          <button class="btn btn-sm" data-act="close-task-guide">关闭引导</button>
+        </div>
+      </div>
+    `;
+  }
   function pageHome() {
     const pendingPo = db.purchases.filter((p) => p.status === "待审核").length;
     const draftPo = db.purchases.filter((p) => p.status === "草稿").length;
@@ -1042,6 +1485,7 @@
         <div class="perm">权限说明<br/>账号类型：商务文员（基础业务）<br/>财务审核：无权限<br/>成本/凭证：无权限<br/>库存调整：无权限</div>
       </div>
 
+      ${taskBannerHtml()}
       <div class="dash-grid">
         <div class="dash-card">
           <div class="k">采购待审核</div>
@@ -1064,7 +1508,6 @@
           <div class="h">财务审核由主管账号完成</div>
         </div>
       </div>
-
       <div class="dash-2">
         <div class="box">
           <div class="box-hd">最近单据 <span class="sub">点查看只读详情</span></div>
@@ -1570,12 +2013,13 @@
                 </tbody>
               </table>
             </div>
+            ${stockPreviewHtml(f.lines, 1, "库存变动预览 · 采购入库（增加）")}
             <div class="total-line">合计金额：<b>¥${money(amt)}</b></div>
           </div>
         </div>
         <div class="box-ft">
           <button class="btn" data-act="cancel-po">返回列表</button>
-          <button class="btn" data-act="save-po-draft">保存草稿</button>
+          <button class="btn" data-act="save-po-draft">保存草稿（Ctrl+S）</button>
           <button class="btn btn-primary" data-act="save-po-submit">保存并提交审核</button>
         </div>
       </div>
@@ -1586,8 +2030,10 @@
     const d = state.viewDoc.doc;
     const qty = d.lines.reduce((s, l) => s + l.qty, 0);
     return `
-      <div class="box">
-        <div class="box-hd">采购单据详情（只读） <span class="st ${statusClass(d.status)}">${esc(d.status)}</span></div>
+      <div class="box print-doc">
+        <div class="box-hd">采购单据详情（只读） <span class="st ${statusClass(d.status)}">${esc(d.status)}</span>
+          <button class="btn btn-sm no-print" data-act="print-doc" style="margin-left:auto">打印</button>
+        </div>
         <div class="box-bd">
           <div class="form-grid">
             <div class="fi"><label>单号</label><div>${esc(d.no)}</div></div>
@@ -1620,30 +2066,29 @@
               </table>
             </div>
           </div>
-          <div style="margin-top:12px"><b>操作时间线</b>
-            <ul style="margin:8px 0 0 18px;line-height:1.8">
-              ${(d.timeline || [])
-                .map((t) => `<li>${esc(t.act)}　<span style="color:var(--ink4)">${esc(t.who)}　${fmtDT(t.at)}</span></li>`)
-                .join("")}
-            </ul>
-          </div>
+          <div style="margin-top:12px"><b>操作时间线</b></div>
+          ${timelineHtml(d.timeline)}
           ${
             d.status === "待审核"
-              ? `<div style="margin-top:12px;padding:8px;background:#fff8e6;border:1px solid #e0c36a;font-size:12px">
-                  待财务审核。你可以点下面「模拟财务审核」看看无权限提示（文员真实环境不能审核）。
-                </div>`
+              ? `<div class="notice-warn">待财务审核。你可以点「模拟财务审核」看看无权限提示（文员真实环境不能审核）。</div>`
               : ""
           }
+          <div class="sign-row">
+            <div>制单人：____________</div>
+            <div>审核人：____________</div>
+            <div>仓管确认：____________</div>
+            <div>日期：____________</div>
+          </div>
         </div>
-        <div class="box-ft">
+        <div class="box-ft no-print">
           <button class="btn" data-act="close-view">返回列表</button>
           ${d.status === "草稿" ? `<button class="btn btn-primary" data-act="edit-po" data-id="${esc(d.id)}">编辑草稿</button>` : ""}
           <button class="btn" data-act="perm-approve">模拟财务审核</button>
+          <button class="btn" data-act="print-doc">打印</button>
         </div>
       </div>
     `;
   }
-
   /* ---------- 销售 ---------- */
   function pageSalesList() {
     if (state.soForm) return pageSOForm();
@@ -1795,12 +2240,13 @@
                 </tbody>
               </table>
             </div>
+            ${stockPreviewHtml(f.lines, -1, "库存变动预览 · 销售出库（防超卖）")}
             <div class="total-line">合计金额：<b>¥${money(lineAmount(f.lines))}</b></div>
           </div>
         </div>
         <div class="box-ft">
           <button class="btn" data-act="cancel-so">返回列表</button>
-          <button class="btn" data-act="save-so-draft">保存草稿</button>
+          <button class="btn" data-act="save-so-draft">保存草稿（Ctrl+S）</button>
           <button class="btn btn-primary" data-act="save-so-submit">保存并提交审核</button>
         </div>
       </div>
@@ -1810,8 +2256,10 @@
   function pageSOView() {
     const d = state.viewDoc.doc;
     return `
-      <div class="box">
-        <div class="box-hd">销售单据详情（只读） <span class="st ${statusClass(d.status)}">${esc(d.status)}</span></div>
+      <div class="box print-doc">
+        <div class="box-hd">销售单据详情（只读） <span class="st ${statusClass(d.status)}">${esc(d.status)}</span>
+          <button class="btn btn-sm no-print" data-act="print-doc" style="margin-left:auto">打印</button>
+        </div>
         <div class="box-bd">
           <div class="form-grid">
             <div class="fi"><label>单号</label><div>${esc(d.no)}</div></div>
@@ -1843,21 +2291,24 @@
               </table>
             </div>
           </div>
-          <div style="margin-top:12px"><b>时间线</b>
-            <ul style="margin:8px 0 0 18px;line-height:1.8">
-              ${(d.timeline || []).map((t) => `<li>${esc(t.act)}　<span style="color:var(--ink4)">${esc(t.who)}　${fmtDT(t.at)}</span></li>`).join("")}
-            </ul>
+          <div style="margin-top:12px"><b>操作时间线</b></div>
+          ${timelineHtml(d.timeline)}
+          <div class="sign-row">
+            <div>制单人：____________</div>
+            <div>审核人：____________</div>
+            <div>仓管确认：____________</div>
+            <div>日期：____________</div>
           </div>
         </div>
-        <div class="box-ft">
+        <div class="box-ft no-print">
           <button class="btn" data-act="close-view">返回列表</button>
           ${d.status === "草稿" ? `<button class="btn btn-primary" data-act="edit-so" data-id="${esc(d.id)}">编辑草稿</button>` : ""}
           <button class="btn" data-act="perm-writeoff">收款核销</button>
+          <button class="btn" data-act="print-doc">打印</button>
         </div>
       </div>
     `;
   }
-
   /* ---------- 库存 ---------- */
   function pageStockQuery() {
     const q = state.f.stockQ.trim().toLowerCase();
@@ -2105,43 +2556,165 @@
   }
 
   function pageStockCheck() {
+    if (state.pddForm) return pagePddForm();
+    const list = db.stockChecks || [];
     return `
       <div class="box">
-        <div class="box-hd">库存盘点单 <span class="sub">只读 — 文员不能创建/审核盘点，仅可查阅</span></div>
+        <div class="box-hd">库存盘点单 <span class="sub">录入/提交待审 → 模拟仓管确认后入账差异（文员不可直接改库存）</span></div>
         <div class="box-bd">
+          <div class="btn-row" style="margin-bottom:8px">
+            <button class="btn btn-primary" data-act="new-pdd">新增盘点单</button>
+            <span class="locked">差异入账以「模拟仓管确认」演示，真实环境由仓管/财务处理</span>
+          </div>
           <div class="tbl-wrap">
             <table class="tbl">
-              <thead><tr><th>盘点单号</th><th>盘点日期</th><th>仓库</th><th>状态</th><th>说明</th></tr></thead>
+              <thead><tr><th>盘点单号</th><th>盘点日期</th><th>仓库</th><th class="right">品种数</th><th>状态</th><th>说明</th><th>操作</th></tr></thead>
               <tbody>
-                <tr>
-                  <td class="mono">PDD-${fmtD(today).replace(/-/g, "")}-0001</td>
-                  <td class="mono">${daysAgo(15)}</td>
-                  <td>主仓</td>
-                  <td><span class="st st-executed">已审核</span></td>
-                  <td>月末例行盘点，差异已处理（财务/仓管权限）</td>
-                </tr>
-                <tr>
-                  <td class="mono">PDD-${fmtD(today).replace(/-/g, "")}-0002</td>
-                  <td class="mono">${daysAgo(2)}</td>
-                  <td>主仓</td>
-                  <td><span class="st st-pending">待审核</span></td>
-                  <td>抽盘日用百货，待财务审核</td>
-                </tr>
+                ${list.length
+                  ? list.map((d) => `<tr>
+                      <td class="mono">${esc(d.no)}</td>
+                      <td class="mono">${esc(d.date)}</td>
+                      <td>${esc(d.warehouse || "主仓")}</td>
+                      <td class="right num">${(d.lines || []).length}</td>
+                      <td><span class="st ${statusClass(d.status)}">${esc(d.status)}</span></td>
+                      <td>${esc(d.note || "")}</td>
+                      <td class="btn-row">
+                        <button class="link" data-act="view-pdd" data-id="${esc(d.id)}">查看</button>
+                        ${d.status === "草稿" ? `<button class="link" data-act="edit-pdd" data-id="${esc(d.id)}">编辑</button>` : ""}
+                        ${d.status === "草稿" ? `<button class="link" data-act="submit-pdd" data-id="${esc(d.id)}">提交待审</button>` : ""}
+                        ${d.status === "待审核" ? `<button class="link" data-act="confirm-pdd" data-id="${esc(d.id)}">模拟仓管确认</button>` : ""}
+                      </td>
+                    </tr>`).join("")
+                  : `<tr><td colspan="7" class="tbl-empty">暂无数据</td></tr>`}
               </tbody>
             </table>
           </div>
-          <div style="margin-top:10px;padding:8px;background:#fff8e6;border:1px solid #e0c36a">
-            如需盘点差异调整库存，请联系仓管/财务账号处理。文员无「盘点录入」与「审核」权限。
+          <div class="notice-warn" style="margin-top:10px">
+            如需盘点差异调整库存，请走「提交待审 → 模拟仓管确认」流程（实训演示）。文员无权直接改写库存。
           </div>
         </div>
         <div class="box-ft">
           <button class="btn" data-nav="home">返回工作台</button>
-          <button class="btn" data-act="perm-stocktake">录入盘点单</button>
+          <button class="btn btn-primary" data-act="new-pdd">录入盘点单</button>
         </div>
       </div>
     `;
   }
 
+  function pagePddForm() {
+    const f = state.pddForm;
+    if (!f) return "";
+    return `
+      <div class="box">
+        <div class="box-hd">${f.id ? "编辑盘点单" : "新增盘点单"} <span class="sub">账面数自动带出，填实盘数；确认后按差异入账</span></div>
+        <div class="box-bd">
+          <div class="form-grid">
+            <div class="fi"><label>盘点单号</label><input class="input" value="${esc(f.no)}" disabled /></div>
+            <div class="fi"><label>盘点日期</label>
+              <input class="input date" type="date" id="pdd-date" value="${esc(f.date)}" /></div>
+            <div class="fi"><label>仓库</label>
+              <input class="input" id="pdd-wh" value="${esc(f.warehouse || "主仓")}" /></div>
+            <div class="fi" style="grid-column:1/-1"><label>说明</label>
+              <input class="input" id="pdd-note" value="${esc(f.note || "")}" /></div>
+          </div>
+          <div class="lines-hd">
+            <b>盘点明细</b>
+            <button class="btn btn-sm" data-act="pdd-add-line">+ 添加行</button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl lines">
+              <thead><tr>
+                <th style="min-width:180px">商品</th>
+                <th class="right" style="width:90px">账面数</th>
+                <th style="width:100px">实盘数</th>
+                <th class="right" style="width:80px">差异</th>
+                <th style="width:50px"></th>
+              </tr></thead>
+              <tbody>
+                ${f.lines.map((l, i) => {
+                  const book = l.productId ? (db.stock[l.productId] || 0) : 0;
+                  const diff = Number(l.realQty || 0) - book;
+                  return `<tr>
+                    <td>
+                      <select data-pline-p="${i}">
+                        <option value="">选择商品</option>
+                        ${productOptions(l.productId, true)}
+                      </select>
+                    </td>
+                    <td class="right num">${l.productId ? book : "—"}</td>
+                    <td><input type="number" min="0" class="num" data-pline-q="${i}" value="${l.realQty}" /></td>
+                    <td class="right num ${diff ? "st-low" : ""}">${l.productId ? (diff > 0 ? "+" : "") + diff : "—"}</td>
+                    <td><button class="link danger" data-act="pdd-del-line" data-i="${i}">删</button></td>
+                  </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+          <div class="notice-info">文员仅录入盘点结果；差异入账需「模拟仓管确认」（演示），不会在保存草稿时改库存。</div>
+        </div>
+        <div class="box-ft">
+          <button class="btn" data-act="cancel-pdd">返回列表</button>
+          <button class="btn" data-act="save-pdd-draft">保存草稿（Ctrl+S）</button>
+          <button class="btn btn-primary" data-act="save-pdd-submit">提交待审</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function pagePddView() {
+    const d = state.viewDoc.doc;
+    return `
+      <div class="box print-doc">
+        <div class="box-hd">盘点单详情 <span class="st ${statusClass(d.status)}">${esc(d.status)}</span>
+          <button class="btn btn-sm no-print" data-act="print-doc" style="margin-left:auto">打印</button>
+        </div>
+        <div class="box-bd">
+          <div class="form-grid">
+            <div class="fi"><label>单号</label><div class="mono">${esc(d.no)}</div></div>
+            <div class="fi"><label>日期</label><div class="mono">${esc(d.date)}</div></div>
+            <div class="fi"><label>仓库</label><div>${esc(d.warehouse || "主仓")}</div></div>
+            <div class="fi"><label>制单人</label><div>${esc(d.createdBy)}</div></div>
+            <div class="fi" style="grid-column:1/-1"><label>说明</label><div>${esc(d.note || "—")}</div></div>
+          </div>
+          <div class="lines-hd"><b>盘点明细</b></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>编码</th><th>品名</th><th class="right">账面数</th><th class="right">实盘数</th><th class="right">差异</th></tr></thead>
+              <tbody>
+                ${(d.lines || []).map((l) => {
+                  const p = productById(l.productId);
+                  const diff = (Number(l.realQty) || 0) - (Number(l.bookQty) || 0);
+                  return `<tr>
+                    <td class="mono">${esc(p?.code || "")}</td>
+                    <td>${esc(p?.name || "")}</td>
+                    <td class="right num">${l.bookQty}</td>
+                    <td class="right num">${l.realQty}</td>
+                    <td class="right num ${diff ? "st-low" : ""}">${diff > 0 ? "+" : ""}${diff}</td>
+                  </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+          <div class="lines-hd"><b>操作时间线</b></div>
+          ${timelineHtml(d.timeline)}
+          ${d.status === "待审核" ? `<div class="notice-warn">待审核。点「模拟仓管确认」按差异入账（演示）。</div>` : ""}
+          <div class="sign-row">
+            <div>制单人：____________</div>
+            <div>复核人：____________</div>
+            <div>仓管确认：____________</div>
+            <div>日期：____________</div>
+          </div>
+        </div>
+        <div class="box-ft no-print">
+          <button class="btn" data-act="close-view">返回列表</button>
+          ${d.status === "草稿" ? `<button class="btn" data-act="edit-pdd" data-id="${esc(d.id)}">编辑</button>` : ""}
+          ${d.status === "草稿" ? `<button class="btn btn-primary" data-act="submit-pdd" data-id="${esc(d.id)}">提交待审</button>` : ""}
+          ${d.status === "待审核" ? `<button class="btn btn-primary" data-act="confirm-pdd" data-id="${esc(d.id)}">模拟仓管确认（差异入账）</button>` : ""}
+          <button class="btn" data-act="print-doc">打印</button>
+        </div>
+      </div>
+    `;
+  }
   /* ---------- 报表中心 ---------- */
   function pageReport() {
     const t = state.f.rptType;
@@ -2242,6 +2815,963 @@
     `;
   }
 
+  /* ---------- 销售退货 ---------- */
+  function pageSalesReturnList() {
+    if (state.xsthForm) return pageXsthForm();
+    if (state.viewDoc && state.viewDoc.kind === "xsth") return pageXsthView();
+    const st = state.f.xsthStatus;
+    const q = state.f.xsthQ.trim().toLowerCase();
+    const list = (db.salesReturns || []).filter((d) => {
+      if (st && d.status !== st) return false;
+      if (q && !(d.no.toLowerCase().includes(q) || customerName(d.customerId).toLowerCase().includes(q)))
+        return false;
+      return true;
+    });
+    return `
+      <div class="box">
+        <div class="box-hd">查询条件</div>
+        <div class="box-bd">
+          <div class="filters">
+            <div class="f-item"><label>单号/客户</label>
+              <input class="input" style="min-width:180px" id="f-xsthQ" value="${esc(state.f.xsthQ)}" /></div>
+            <div class="f-item"><label>状态</label>
+              <select class="select" id="f-xsthStatus">
+                <option value="">全部</option>
+                ${["草稿", "待审核", "已退货"].map((x) => `<option value="${x}" ${st === x ? "selected" : ""}>${x}</option>`).join("")}
+              </select></div>
+            <div class="f-item"><label>&nbsp;</label>
+              <div class="btn-row">
+                <button class="btn btn-primary" data-act="xsth-search">查询</button>
+                <button class="btn" data-act="xsth-reset">重置</button>
+              </div></div>
+          </div>
+        </div>
+      </div>
+      <div class="box">
+        <div class="box-hd">销售退货单列表 <span class="sub">共 ${list.length} 张 · 审核通过（模拟仓管确认）后库存回加</span></div>
+        <div class="box-bd">
+          <div class="btn-row" style="margin-bottom:8px">
+            <button class="btn btn-primary" data-act="new-xsth">新增销售退货单</button>
+            <button class="btn" data-act="xsth-export">导出退货明细</button>
+            <span class="locked">状态：草稿 → 待审核 → 已退货；文员可录入/提交，出库回加以「模拟仓管确认」演示</span>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>单号</th><th>原销售单</th><th>客户</th><th>日期</th><th class="right">数量</th><th class="right">金额</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                ${list.length
+                  ? list.map((d) => `<tr>
+                      <td class="mono">${esc(d.no)}</td>
+                      <td class="mono">${esc(d.soNo || "—")}</td>
+                      <td>${esc(customerName(d.customerId))}</td>
+                      <td class="mono">${esc(d.date)}</td>
+                      <td class="right num">${d.lines.reduce((s, l) => s + l.qty, 0)}</td>
+                      <td class="right num">¥${money(lineAmount(d.lines))}</td>
+                      <td><span class="st ${statusClass(d.status)}">${esc(d.status)}</span></td>
+                      <td class="btn-row">
+                        <button class="link" data-act="view-xsth" data-id="${esc(d.id)}">查看</button>
+                        ${d.status === "草稿" ? `<button class="link" data-act="edit-xsth" data-id="${esc(d.id)}">编辑</button>` : ""}
+                        ${d.status === "待审核" ? `<button class="link" data-act="confirm-xsth" data-id="${esc(d.id)}">模拟仓管确认</button>` : ""}
+                      </td>
+                    </tr>`).join("")
+                  : `<tr><td colspan="8" class="tbl-empty">暂无数据</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="box-ft">
+          <button class="btn" data-nav="home">返回工作台</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function pageXsthForm() {
+    const f = state.xsthForm;
+    if (!f) return "";
+    const so = f.soId ? db.sales.find((x) => x.id === f.soId) : null;
+    return `
+      <div class="box">
+        <div class="box-hd">${f.id ? "编辑销售退货单" : "新增销售退货单"} <span class="sub">数量 ≤ 已出库量 − 已退货量 · 确认后库存回加</span></div>
+        <div class="box-bd">
+          <div class="form-grid">
+            <div class="fi"><label>单号</label><input class="input" value="${esc(f.no)}" disabled /></div>
+            <div class="fi"><label>原销售单</label>
+              <select class="select" id="xsth-so">
+                <option value="">按客户+商品录入（不选原单）</option>
+                ${db.sales.filter((x) => x.status === "已出库" || x.status === "部分出库")
+                  .map((x) => `<option value="${esc(x.id)}" ${f.soId === x.id ? "selected" : ""}>${esc(x.no)}（${esc(customerName(x.customerId))}）</option>`).join("")}
+              </select>
+              <span class="hint">选择原销售单后可带出客户，数量上限=已出库−已退货</span>
+            </div>
+            <div class="fi"><label>客户<span class="req">*</span></label>
+              <select class="select" id="xsth-cus">
+                <option value="">请选择客户</option>
+                ${optList(db.customers.filter((c) => c.active), "id", (c) => c.name, f.customerId)}
+              </select></div>
+            <div class="fi"><label>退货日期</label>
+              <input class="input date" type="date" id="xsth-date" value="${esc(f.date)}" /></div>
+            <div class="fi" style="grid-column:1/-1"><label>备注</label>
+              <input class="input" id="xsth-note" value="${esc(f.note || "")}" placeholder="如：破损退货 / 客户拒收" /></div>
+          </div>
+
+          <div class="lines-hd">
+            <b>退货明细</b>
+            <button class="btn btn-sm" data-act="xsth-add-line">+ 添加行</button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl lines">
+              <thead><tr>
+                <th style="min-width:180px">商品<span class="req">*</span></th>
+                <th style="width:90px">退货数量</th>
+                <th style="width:100px">单价</th>
+                <th class="right" style="width:90px">可退上限</th>
+                <th class="right" style="width:90px">金额</th>
+                <th style="width:50px"></th>
+              </tr></thead>
+              <tbody>
+                ${f.lines.map((l, i) => {
+                  const max = so ? maxReturnableSO(so, l.productId, f.id) : 9999;
+                  return `<tr>
+                    <td>
+                      <select data-xline-p="${i}">
+                        <option value="">选择商品</option>
+                        ${productOptions(l.productId, true)}
+                      </select>
+                    </td>
+                    <td><input type="number" min="1" class="num" data-xline-q="${i}" value="${l.qty}" /></td>
+                    <td><input type="number" min="0" step="0.01" class="num" data-xline-pr="${i}" value="${l.price}" /></td>
+                    <td class="right num">${so ? max : "—"}</td>
+                    <td class="right num">¥${money(round2(l.qty * l.price))}</td>
+                    <td><button class="link danger" data-act="xsth-del-line" data-i="${i}">删</button></td>
+                  </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+          ${stockPreviewHtml(f.lines, 1, "库存变动预览 · 销售退货（回加）")}
+          <div class="total-line">合计金额：<b>¥${money(lineAmount(f.lines))}</b></div>
+        </div>
+        <div class="box-ft">
+          <button class="btn" data-act="cancel-xsth">返回列表</button>
+          <button class="btn" data-act="save-xsth-draft">保存草稿（Ctrl+S）</button>
+          <button class="btn btn-primary" data-act="save-xsth-submit">提交待审</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function pageXsthView() {
+    const d = state.viewDoc.doc;
+    return `
+      <div class="box print-doc">
+        <div class="box-hd">销售退货单详情 <span class="st ${statusClass(d.status)}">${esc(d.status)}</span>
+          <span class="sub">确认后库存回加，并生成「销售退货」出入库流水</span></div>
+        <div class="box-bd">
+          <div class="form-grid">
+            <div class="fi"><label>单号</label><div class="mono">${esc(d.no)}</div></div>
+            <div class="fi"><label>原销售单</label><div class="mono">${esc(d.soNo || "—")}</div></div>
+            <div class="fi"><label>客户</label><div>${esc(customerName(d.customerId))}</div></div>
+            <div class="fi"><label>日期</label><div class="mono">${esc(d.date)}</div></div>
+            <div class="fi"><label>制单人</label><div>${esc(d.createdBy)}</div></div>
+            <div class="fi"><label>金额合计</label><div class="num">¥${money(lineAmount(d.lines))}</div></div>
+            <div class="fi" style="grid-column:1/-1"><label>备注</label><div>${esc(d.note || "—")}</div></div>
+          </div>
+          <div class="lines-hd"><b>退货明细</b></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>编码</th><th>品名</th><th>单位</th><th class="right">数量</th><th class="right">单价</th><th class="right">金额</th></tr></thead>
+              <tbody>
+                ${d.lines.map((l) => {
+                  const p = productById(l.productId);
+                  return `<tr>
+                    <td class="mono">${esc(p?.code || "")}</td>
+                    <td>${esc(p?.name || "")}</td>
+                    <td>${esc(p?.unit || "")}</td>
+                    <td class="right num">${l.qty}</td>
+                    <td class="right num">${money(l.price)}</td>
+                    <td class="right num">${money(round2(l.qty * l.price))}</td>
+                  </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+          <div class="lines-hd"><b>操作时间线</b></div>
+          ${timelineHtml(d.timeline)}
+          ${d.status === "待审核" ? `<div class="notice-warn">待审核。文员可点「模拟仓管确认」演示库存回加（真实环境由仓管/财务处理）。</div>` : ""}
+          <div class="sign-row">
+            <div>制单人：____________</div>
+            <div>审核人：____________</div>
+            <div>仓管确认：____________</div>
+            <div>日期：____________</div>
+          </div>
+        </div>
+        <div class="box-ft no-print">
+          <button class="btn" data-act="close-view">返回列表</button>
+          ${d.status === "草稿" ? `<button class="btn" data-act="edit-xsth" data-id="${esc(d.id)}">编辑草稿</button>` : ""}
+          ${d.status === "草稿" ? `<button class="btn btn-primary" data-act="submit-xsth" data-id="${esc(d.id)}">提交待审</button>` : ""}
+          ${d.status === "待审核" ? `<button class="btn btn-primary" data-act="confirm-xsth" data-id="${esc(d.id)}">模拟仓管确认（库存回加）</button>` : ""}
+          <button class="btn" data-act="print-doc">打印</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /* ---------- 采购退货 ---------- */
+  function pagePurchaseReturnList() {
+    if (state.cgthForm) return pageCgthForm();
+    if (state.viewDoc && state.viewDoc.kind === "cgth") return pageCgthView();
+    const st = state.f.cgthStatus;
+    const q = state.f.cgthQ.trim().toLowerCase();
+    const list = (db.purchaseReturns || []).filter((d) => {
+      if (st && d.status !== st) return false;
+      if (q && !(d.no.toLowerCase().includes(q) || supplierName(d.supplierId).toLowerCase().includes(q)))
+        return false;
+      return true;
+    });
+    return `
+      <div class="box">
+        <div class="box-hd">查询条件</div>
+        <div class="box-bd">
+          <div class="filters">
+            <div class="f-item"><label>单号/供应商</label>
+              <input class="input" style="min-width:180px" id="f-cgthQ" value="${esc(state.f.cgthQ)}" /></div>
+            <div class="f-item"><label>状态</label>
+              <select class="select" id="f-cgthStatus">
+                <option value="">全部</option>
+                ${["草稿", "待审核", "已退货"].map((x) => `<option value="${x}" ${st === x ? "selected" : ""}>${x}</option>`).join("")}
+              </select></div>
+            <div class="f-item"><label>&nbsp;</label>
+              <div class="btn-row">
+                <button class="btn btn-primary" data-act="cgth-search">查询</button>
+                <button class="btn" data-act="cgth-reset">重置</button>
+              </div></div>
+          </div>
+        </div>
+      </div>
+      <div class="box">
+        <div class="box-hd">采购退货单列表 <span class="sub">共 ${list.length} 张 · 确认后库存扣减</span></div>
+        <div class="box-bd">
+          <div class="btn-row" style="margin-bottom:8px">
+            <button class="btn btn-primary" data-act="new-cgth">新增采购退货单</button>
+            <button class="btn" data-act="cgth-export">导出退货明细</button>
+            <span class="locked">数量 ≤ 已入库量 − 已退货量；确认后生成「采购退货」流水并扣减库存</span>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>单号</th><th>原采购单</th><th>供应商</th><th>日期</th><th class="right">数量</th><th class="right">金额</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                ${list.length
+                  ? list.map((d) => `<tr>
+                      <td class="mono">${esc(d.no)}</td>
+                      <td class="mono">${esc(d.poNo || "—")}</td>
+                      <td>${esc(supplierName(d.supplierId))}</td>
+                      <td class="mono">${esc(d.date)}</td>
+                      <td class="right num">${d.lines.reduce((s, l) => s + l.qty, 0)}</td>
+                      <td class="right num">¥${money(lineAmount(d.lines))}</td>
+                      <td><span class="st ${statusClass(d.status)}">${esc(d.status)}</span></td>
+                      <td class="btn-row">
+                        <button class="link" data-act="view-cgth" data-id="${esc(d.id)}">查看</button>
+                        ${d.status === "草稿" ? `<button class="link" data-act="edit-cgth" data-id="${esc(d.id)}">编辑</button>` : ""}
+                        ${d.status === "待审核" ? `<button class="link" data-act="confirm-cgth" data-id="${esc(d.id)}">模拟仓管确认</button>` : ""}
+                      </td>
+                    </tr>`).join("")
+                  : `<tr><td colspan="8" class="tbl-empty">暂无数据</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="box-ft">
+          <button class="btn" data-nav="home">返回工作台</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function pageCgthForm() {
+    const f = state.cgthForm;
+    if (!f) return "";
+    const po = f.poId ? db.purchases.find((x) => x.id === f.poId) : null;
+    return `
+      <div class="box">
+        <div class="box-hd">${f.id ? "编辑采购退货单" : "新增采购退货单"} <span class="sub">数量 ≤ 已入库量 − 已退货量 · 确认后库存扣减</span></div>
+        <div class="box-bd">
+          <div class="form-grid">
+            <div class="fi"><label>单号</label><input class="input" value="${esc(f.no)}" disabled /></div>
+            <div class="fi"><label>原采购单</label>
+              <select class="select" id="cgth-po">
+                <option value="">按供应商+商品录入（不选原单）</option>
+                ${db.purchases.filter((x) => x.status === "已入库")
+                  .map((x) => `<option value="${esc(x.id)}" ${f.poId === x.id ? "selected" : ""}>${esc(x.no)}（${esc(supplierName(x.supplierId))}）</option>`).join("")}
+              </select>
+            </div>
+            <div class="fi"><label>供应商<span class="req">*</span></label>
+              <select class="select" id="cgth-sup">
+                <option value="">请选择供应商</option>
+                ${optList(db.suppliers.filter((c) => c.active), "id", (c) => c.name, f.supplierId)}
+              </select></div>
+            <div class="fi"><label>退货日期</label>
+              <input class="input date" type="date" id="cgth-date" value="${esc(f.date)}" /></div>
+            <div class="fi" style="grid-column:1/-1"><label>备注</label>
+              <input class="input" id="cgth-note" value="${esc(f.note || "")}" /></div>
+          </div>
+          <div class="lines-hd">
+            <b>退货明细</b>
+            <button class="btn btn-sm" data-act="cgth-add-line">+ 添加行</button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl lines">
+              <thead><tr>
+                <th style="min-width:180px">商品<span class="req">*</span></th>
+                <th style="width:90px">退货数量</th>
+                <th style="width:100px">单价</th>
+                <th class="right" style="width:90px">可退上限</th>
+                <th class="right" style="width:90px">金额</th>
+                <th style="width:50px"></th>
+              </tr></thead>
+              <tbody>
+                ${f.lines.map((l, i) => {
+                  const max = po ? maxReturnablePO(po, l.productId, f.id) : 9999;
+                  return `<tr>
+                    <td>
+                      <select data-cline-p="${i}">
+                        <option value="">选择商品</option>
+                        ${productOptions(l.productId, true)}
+                      </select>
+                    </td>
+                    <td><input type="number" min="1" class="num" data-cline-q="${i}" value="${l.qty}" /></td>
+                    <td><input type="number" min="0" step="0.01" class="num" data-cline-pr="${i}" value="${l.price}" /></td>
+                    <td class="right num">${po ? max : "—"}</td>
+                    <td class="right num">¥${money(round2(l.qty * l.price))}</td>
+                    <td><button class="link danger" data-act="cgth-del-line" data-i="${i}">删</button></td>
+                  </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+          ${stockPreviewHtml(f.lines, -1, "库存变动预览 · 采购退货（扣减）")}
+          <div class="total-line">合计金额：<b>¥${money(lineAmount(f.lines))}</b></div>
+        </div>
+        <div class="box-ft">
+          <button class="btn" data-act="cancel-cgth">返回列表</button>
+          <button class="btn" data-act="save-cgth-draft">保存草稿（Ctrl+S）</button>
+          <button class="btn btn-primary" data-act="save-cgth-submit">提交待审</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function pageCgthView() {
+    const d = state.viewDoc.doc;
+    return `
+      <div class="box print-doc">
+        <div class="box-hd">采购退货单详情 <span class="st ${statusClass(d.status)}">${esc(d.status)}</span>
+          <span class="sub">确认后库存扣减，并生成「采购退货」出入库流水</span></div>
+        <div class="box-bd">
+          <div class="form-grid">
+            <div class="fi"><label>单号</label><div class="mono">${esc(d.no)}</div></div>
+            <div class="fi"><label>原采购单</label><div class="mono">${esc(d.poNo || "—")}</div></div>
+            <div class="fi"><label>供应商</label><div>${esc(supplierName(d.supplierId))}</div></div>
+            <div class="fi"><label>日期</label><div class="mono">${esc(d.date)}</div></div>
+            <div class="fi"><label>制单人</label><div>${esc(d.createdBy)}</div></div>
+            <div class="fi"><label>金额合计</label><div class="num">¥${money(lineAmount(d.lines))}</div></div>
+            <div class="fi" style="grid-column:1/-1"><label>备注</label><div>${esc(d.note || "—")}</div></div>
+          </div>
+          <div class="lines-hd"><b>退货明细</b></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>编码</th><th>品名</th><th>单位</th><th class="right">数量</th><th class="right">单价</th><th class="right">金额</th></tr></thead>
+              <tbody>
+                ${d.lines.map((l) => {
+                  const p = productById(l.productId);
+                  return `<tr>
+                    <td class="mono">${esc(p?.code || "")}</td>
+                    <td>${esc(p?.name || "")}</td>
+                    <td>${esc(p?.unit || "")}</td>
+                    <td class="right num">${l.qty}</td>
+                    <td class="right num">${money(l.price)}</td>
+                    <td class="right num">${money(round2(l.qty * l.price))}</td>
+                  </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+          <div class="lines-hd"><b>操作时间线</b></div>
+          ${timelineHtml(d.timeline)}
+          ${d.status === "待审核" ? `<div class="notice-warn">待审核。文员可点「模拟仓管确认」演示库存扣减（真实环境由仓管/财务处理）。</div>` : ""}
+          <div class="sign-row">
+            <div>制单人：____________</div>
+            <div>审核人：____________</div>
+            <div>仓管确认：____________</div>
+            <div>日期：____________</div>
+          </div>
+        </div>
+        <div class="box-ft no-print">
+          <button class="btn" data-act="close-view">返回列表</button>
+          ${d.status === "草稿" ? `<button class="btn" data-act="edit-cgth" data-id="${esc(d.id)}">编辑草稿</button>` : ""}
+          ${d.status === "草稿" ? `<button class="btn btn-primary" data-act="submit-cgth" data-id="${esc(d.id)}">提交待审</button>` : ""}
+          ${d.status === "待审核" ? `<button class="btn btn-primary" data-act="confirm-cgth" data-id="${esc(d.id)}">模拟仓管确认（库存扣减）</button>` : ""}
+          <button class="btn" data-act="print-doc">打印</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /* ---------- 实训任务 ---------- */
+  function pageTasks() {
+    const tasks = taskList();
+    const done = tasks.filter((t) => t.done).length;
+    const pct = Math.round((done / tasks.length) * 100);
+    return `
+      <div class="box">
+        <div class="box-hd">实训任务卡 L1–L6 <span class="sub">根据本地数据自动判定完成 · 可关闭引导</span></div>
+        <div class="box-bd">
+          <div class="task-progress">
+            <div class="tp-bar"><div class="tp-fill" style="width:${pct}%"></div></div>
+            <div class="tp-text">已完成 ${done} / ${tasks.length}（${pct}%）</div>
+          </div>
+          <div class="task-grid">
+            ${tasks.map((t) => `
+              <div class="task-card ${t.done ? "done" : ""}">
+                <div class="tc-top">
+                  <span class="tc-id">${t.id}</span>
+                  <span class="tc-check ${t.done ? "on" : ""}">${t.done ? "✓" : ""}</span>
+                </div>
+                <div class="tc-title">${esc(t.title)}</div>
+                <div class="tc-desc">${esc(t.desc)}</div>
+                <button class="btn btn-sm" data-nav="${t.nav}">${t.done ? "再练一次" : "去完成"}</button>
+              </div>
+            `).join("")}
+          </div>
+          <div class="notice-info">
+            判定规则：L1 有商品+供应商 · L2 有已入库采购 · L3 有已出库销售 · L4 有已确认退货 · L5 有盘点记录 · L6 导出过进销存汇总。<br/>
+            文员权限：可录入/查询/导出；不可财务审核、不可直接改库存。退货与盘点以「提交待审 / 模拟仓管确认」演示。
+          </div>
+        </div>
+        <div class="box-ft">
+          <button class="btn" data-act="close-task-guide">关闭引导（不再自动提示）</button>
+          <button class="btn" data-act="open-task-guide">恢复引导</button>
+          <button class="btn btn-primary" data-nav="home">返回工作台</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function pageLogs() {
+    const logs = (db.logs || []).slice(0, 20);
+    return `
+      <div class="box">
+        <div class="box-hd">操作日志 <span class="sub">最近 20 条 · 新建/提交/退货确认/导出/重置等关键动作</span></div>
+        <div class="box-bd">
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>说明</th></tr></thead>
+              <tbody>
+                ${logs.length
+                  ? logs.map((l) => `<tr>
+                      <td class="mono">${fmtDT(l.at)}</td>
+                      <td>${esc(l.who)}</td>
+                      <td><span class="st st-approved">${esc(l.act)}</span></td>
+                      <td>${esc(l.detail || "")}</td>
+                    </tr>`).join("")
+                  : `<tr><td colspan="4" class="tbl-empty">暂无日志</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="box-ft">
+          <button class="btn" data-nav="home">返回工作台</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /* ---------- 进销存汇总 ---------- */
+  function pageInvSum() {
+    const from = state.f.invFrom, to = state.f.invTo;
+    const rows = invSumRows(from, to);
+    const t = invSumTotal(rows);
+    return `
+      <div class="box">
+        <div class="box-hd">进销存汇总条件 <span class="sub">期初 + 采购入库 − 采购退货 − 销售出库 + 销售退货 = 期末</span></div>
+        <div class="box-bd">
+          <div class="filters">
+            <div class="f-item"><label>起始日期</label>
+              <input class="input date" type="date" id="f-invFrom" value="${esc(from)}" /></div>
+            <div class="f-item"><label>截止日期</label>
+              <input class="input date" type="date" id="f-invTo" value="${esc(to)}" /></div>
+            <div class="f-item"><label>&nbsp;</label>
+              <div class="btn-row">
+                <button class="btn btn-primary" data-act="invsum-search">查询</button>
+                <button class="btn" data-act="invsum-reset">重置</button>
+                <button class="btn btn-primary" data-act="invsum-export">导出 CSV</button>
+              </div></div>
+          </div>
+        </div>
+      </div>
+      <div class="box">
+        <div class="box-hd">汇总预览 <span class="sub">${esc(from)} ~ ${esc(to)}</span></div>
+        <div class="box-bd">
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr>
+                <th>编码</th><th>品名</th><th>单位</th>
+                <th class="right">期初</th><th class="right">采购入库</th><th class="right">采购退货</th>
+                <th class="right">销售出库</th><th class="right">销售退货</th><th class="right">期末</th>
+              </tr></thead>
+              <tbody>
+                ${rows.map((r) => `<tr>
+                  <td class="mono">${esc(r.code)}</td>
+                  <td>${esc(r.name)}</td>
+                  <td>${esc(r.unit)}</td>
+                  <td class="right num">${r.openQty}</td>
+                  <td class="right num">${r.poIn}</td>
+                  <td class="right num">${r.poOut}</td>
+                  <td class="right num">${r.soOut}</td>
+                  <td class="right num">${r.soIn}</td>
+                  <td class="right num"><b>${r.endQty}</b></td>
+                </tr>`).join("")}
+                <tr class="sum-row">
+                  <td colspan="3">合计</td>
+                  <td class="right num">${t.openQty}</td>
+                  <td class="right num">${t.poIn}</td>
+                  <td class="right num">${t.poOut}</td>
+                  <td class="right num">${t.soOut}</td>
+                  <td class="right num">${t.soIn}</td>
+                  <td class="right num"><b>${t.endQty}</b></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="box-ft">
+          <button class="btn" data-nav="home">返回工作台</button>
+          <button class="btn btn-primary" data-act="invsum-export">导出 CSV</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /* ---------- 往来对账单 ---------- */
+  function pageReconcile() {
+    const type = state.f.recType;
+    const rows = reconcileRows(type, state.f.recId);
+    return `
+      <div class="box">
+        <div class="box-hd">对账条件 <span class="sub">采购/销售回款为模拟数，仅用于实训演示</span></div>
+        <div class="box-bd">
+          <div class="filters">
+            <div class="f-item"><label>对象类型</label>
+              <select class="select" id="f-recType">
+                <option value="supplier" ${type === "supplier" ? "selected" : ""}>供应商</option>
+                <option value="customer" ${type === "customer" ? "selected" : ""}>客户</option>
+              </select></div>
+            <div class="f-item"><label>往来单位</label>
+              <select class="select" id="f-recId">
+                <option value="">全部</option>
+                ${type === "supplier"
+                  ? optList(db.suppliers, "id", (x) => x.name, state.f.recId)
+                  : optList(db.customers, "id", (x) => x.name, state.f.recId)}
+              </select></div>
+            <div class="f-item"><label>&nbsp;</label>
+              <div class="btn-row">
+                <button class="btn btn-primary" data-act="rec-search">查询</button>
+                <button class="btn" data-act="rec-reset">重置</button>
+                <button class="btn btn-primary" data-act="rec-export">导出 CSV</button>
+              </div></div>
+          </div>
+        </div>
+      </div>
+      <div class="box">
+        <div class="box-hd">对账预览 <span class="sub">${type === "supplier" ? "供应商：采购额 − 退货额 − 模拟付款 = 结存" : "客户：销售额 − 退货额 − 模拟回款 = 结存"}</span></div>
+        <div class="box-bd">
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr>
+                <th>编码</th><th>名称</th>
+                ${type === "supplier"
+                  ? `<th class="right">采购额</th><th class="right">退货额</th><th class="right">模拟付款</th><th class="right">结存</th>`
+                  : `<th class="right">销售额</th><th class="right">退货额</th><th class="right">模拟回款</th><th class="right">结存</th>`}
+              </tr></thead>
+              <tbody>
+                ${rows.length
+                  ? rows.map((r) => `<tr>
+                      <td class="mono">${esc(r.code)}</td>
+                      <td>${esc(r.name)}</td>
+                      <td class="right num">${type === "supplier" ? money(r.buy) : money(r.sell)}</td>
+                      <td class="right num">${money(r.ret)}</td>
+                      <td class="right num">${money(type === "supplier" ? r.pay : r.recv)}</td>
+                      <td class="right num"><b>${money(r.bal)}</b></td>
+                    </tr>`).join("")
+                  : `<tr><td colspan="6" class="tbl-empty">暂无数据</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+          <div class="notice-info">回款/付款为模拟数（已执行单据按 70% 估算），用于实训演示对账口径，不作为财务依据。</div>
+        </div>
+        <div class="box-ft">
+          <button class="btn" data-nav="home">返回工作台</button>
+          <button class="btn btn-primary" data-act="rec-export">导出 CSV</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /* ---------- 退货 / 盘点 / 汇总导出 业务函数 ---------- */
+  function syncXsthLines() {
+    const f = state.xsthForm;
+    if (!f) return;
+    document.querySelectorAll("[data-xline-p]").forEach((sel) => {
+      f.lines[+sel.dataset.xlineP].productId = sel.value;
+    });
+    document.querySelectorAll("[data-xline-q]").forEach((inp) => {
+      f.lines[+inp.dataset.xlineQ].qty = Number(inp.value) || 0;
+    });
+    document.querySelectorAll("[data-xline-pr]").forEach((inp) => {
+      f.lines[+inp.dataset.xlinePr].price = Number(inp.value) || 0;
+    });
+  }
+  function syncCgthLines() {
+    const f = state.cgthForm;
+    if (!f) return;
+    document.querySelectorAll("[data-cline-p]").forEach((sel) => {
+      f.lines[+sel.dataset.clineP].productId = sel.value;
+    });
+    document.querySelectorAll("[data-cline-q]").forEach((inp) => {
+      f.lines[+inp.dataset.clineQ].qty = Number(inp.value) || 0;
+    });
+    document.querySelectorAll("[data-cline-pr]").forEach((inp) => {
+      f.lines[+inp.dataset.clinePr].price = Number(inp.value) || 0;
+    });
+  }
+  function syncPddLines() {
+    const f = state.pddForm;
+    if (!f) return;
+    document.querySelectorAll("[data-pline-p]").forEach((sel) => {
+      f.lines[+sel.dataset.plineP].productId = sel.value;
+    });
+    document.querySelectorAll("[data-pline-q]").forEach((inp) => {
+      f.lines[+inp.dataset.plineQ].realQty = Number(inp.value) || 0;
+    });
+  }
+
+  function saveXsth(status) {
+    const f = state.xsthForm;
+    if (!f) return;
+    if (!f.customerId) return needField("客户");
+    const lines = validateLines(f.lines, "so", existingLineIds({ id: f.id, kind: "xsth" }));
+    if (!lines) return;
+    const so = f.soId ? db.sales.find((x) => x.id === f.soId) : null;
+    if (so) {
+      for (const l of lines) {
+        const max = maxReturnableSO(so, l.productId, f.id);
+        if (l.qty > max) {
+          return alertBox("err", "退货数量超限",
+            "商品「" + (productById(l.productId)?.name || l.productId) + "」退货数量 " + l.qty + "，可退上限 " + max,
+            "数量 ≤ 已出库量 − 已退货量。请修改数量后再保存。");
+        }
+      }
+    }
+    const rec = {
+      id: f.id || uid("XSTH"),
+      no: f.id ? f.no : nextXsthNo(),
+      date: f.date || fmtD(today),
+      customerId: f.customerId,
+      soId: f.soId || "",
+      soNo: f.soNo || (so ? so.no : ""),
+      lines: lines,
+      status: status === "draft" ? "草稿" : "待审核",
+      createdBy: db.user.name,
+      createdAt: f.createdAt || Date.now(),
+      note: String(f.note || "").trim(),
+      timeline: f.timeline || [],
+    };
+    rec.timeline.push({
+      act: status === "draft" ? "录入退货草稿" : "提交待审",
+      who: db.user.name,
+      at: Date.now(),
+    });
+    if (f.id) {
+      const i = db.salesReturns.findIndex((x) => x.id === f.id);
+      db.salesReturns[i] = rec;
+    } else {
+      db.salesReturns.unshift(rec);
+    }
+    state.xsthForm = null;
+    logAction(status === "draft" ? "新建销售退货草稿" : "提交销售退货", rec.no);
+    save();
+    if (status === "draft") {
+      alertBox("ok", "系统提示", "销售退货单已保存为草稿", "单号：" + rec.no);
+    } else {
+      alertBox("ok", "提交成功", "销售退货单已提交待审", "单号：" + rec.no + "。请点「模拟仓管确认」完成库存回加（实训演示）。");
+    }
+  }
+
+  function submitXsth(id) {
+    const d = db.salesReturns.find((x) => x.id === id);
+    if (!d || d.status !== "草稿") return;
+    d.status = "待审核";
+    d.timeline = d.timeline || [];
+    d.timeline.push({ act: "提交待审", who: db.user.name, at: Date.now() });
+    logAction("提交销售退货", d.no);
+    save();
+    render();
+    alertBox("ok", "已提交待审", "销售退货单已提交，等待仓管确认。", "单号：" + d.no + "。确认后库存回加。");
+  }
+
+  function confirmXsth(id) {
+    const d = db.salesReturns.find((x) => x.id === id);
+    if (!d || d.status !== "待审核") return;
+    if (!confirm("模拟仓管确认后：销售退货库存回加，并生成「销售退货」出入库流水。\n确认继续？（实训演示，真实环境由仓管处理）")) return;
+    d.lines.forEach((l) => {
+      const p = productById(l.productId);
+      if (!p) return;
+      db.stock[p.id] = (db.stock[p.id] || 0) + l.qty;
+      db.moves.push({
+        id: uid("M"), date: d.date, type: "销售退货",
+        productCode: p.code, productName: p.name, unit: p.unit,
+        qty: l.qty, refNo: d.no, operator: "仓管老黄", note: "退货入库",
+      });
+    });
+    d.status = "已退货";
+    d.timeline.push({ act: "模拟仓管确认（库存回加）", who: "仓管老黄", at: Date.now() });
+    logAction("销售退货确认", d.no + " 库存回加");
+    save();
+    state.viewDoc = { kind: "xsth", doc: JSON.parse(JSON.stringify(d)) };
+    render();
+    alertBox("ok", "退货已完成", "销售退货已确认，库存已回加。", "单号：" + d.no);
+  }
+
+  function saveCgth(status) {
+    const f = state.cgthForm;
+    if (!f) return;
+    if (!f.supplierId) return needField("供应商");
+    const lines = validateLines(f.lines, "po", existingLineIds({ id: f.id, kind: "cgth" }));
+    if (!lines) return;
+    const po = f.poId ? db.purchases.find((x) => x.id === f.poId) : null;
+    if (po) {
+      for (const l of lines) {
+        const max = maxReturnablePO(po, l.productId, f.id);
+        if (l.qty > max) {
+          return alertBox("err", "退货数量超限",
+            "商品「" + (productById(l.productId)?.name || l.productId) + "」退货数量 " + l.qty + "，可退上限 " + max,
+            "数量 ≤ 已入库量 − 已退货量。请修改数量后再保存。");
+        }
+      }
+    }
+    const rec = {
+      id: f.id || uid("CGTH"),
+      no: f.id ? f.no : nextCgthNo(),
+      date: f.date || fmtD(today),
+      supplierId: f.supplierId,
+      poId: f.poId || "",
+      poNo: f.poNo || (po ? po.no : ""),
+      lines: lines,
+      status: status === "draft" ? "草稿" : "待审核",
+      createdBy: db.user.name,
+      createdAt: f.createdAt || Date.now(),
+      note: String(f.note || "").trim(),
+      timeline: f.timeline || [],
+    };
+    rec.timeline.push({
+      act: status === "draft" ? "录入退货草稿" : "提交待审",
+      who: db.user.name,
+      at: Date.now(),
+    });
+    if (f.id) {
+      const i = db.purchaseReturns.findIndex((x) => x.id === f.id);
+      db.purchaseReturns[i] = rec;
+    } else {
+      db.purchaseReturns.unshift(rec);
+    }
+    state.cgthForm = null;
+    logAction(status === "draft" ? "新建采购退货草稿" : "提交采购退货", rec.no);
+    save();
+    if (status === "draft") {
+      alertBox("ok", "系统提示", "采购退货单已保存为草稿", "单号：" + rec.no);
+    } else {
+      alertBox("ok", "提交成功", "采购退货单已提交待审", "单号：" + rec.no + "。确认后库存扣减。");
+    }
+  }
+
+  function submitCgth(id) {
+    const d = db.purchaseReturns.find((x) => x.id === id);
+    if (!d || d.status !== "草稿") return;
+    d.status = "待审核";
+    d.timeline = d.timeline || [];
+    d.timeline.push({ act: "提交待审", who: db.user.name, at: Date.now() });
+    logAction("提交采购退货", d.no);
+    save();
+    render();
+    alertBox("ok", "已提交待审", "采购退货单已提交，等待仓管确认。", "单号：" + d.no);
+  }
+
+  function confirmCgth(id) {
+    const d = db.purchaseReturns.find((x) => x.id === id);
+    if (!d || d.status !== "待审核") return;
+    if (!confirm("模拟仓管确认后：采购退货库存扣减，并生成「采购退货」出入库流水。\n确认继续？（实训演示）")) return;
+    d.lines.forEach((l) => {
+      const p = productById(l.productId);
+      if (!p) return;
+      db.stock[p.id] = Math.max(0, (db.stock[p.id] || 0) - l.qty);
+      db.moves.push({
+        id: uid("M"), date: d.date, type: "采购退货",
+        productCode: p.code, productName: p.name, unit: p.unit,
+        qty: -l.qty, refNo: d.no, operator: "仓管老黄", note: "退货出库",
+      });
+    });
+    d.status = "已退货";
+    d.timeline.push({ act: "模拟仓管确认（库存扣减）", who: "仓管老黄", at: Date.now() });
+    logAction("采购退货确认", d.no + " 库存扣减");
+    save();
+    state.viewDoc = { kind: "cgth", doc: JSON.parse(JSON.stringify(d)) };
+    render();
+    alertBox("ok", "退货已完成", "采购退货已确认，库存已扣减。", "单号：" + d.no);
+  }
+
+  function exportXsth() {
+    const rows = (db.salesReturns || []).map((d) => [
+      d.date, d.no, d.soNo || "", customerName(d.customerId),
+      d.lines.map((l) => (productById(l.productId)?.name || "") + "×" + l.qty).join(" / "),
+      money(lineAmount(d.lines)), d.status, d.createdBy,
+    ]);
+    exportCSV("销售退货明细_" + fmtD(today) + ".csv",
+      ["日期", "退货单号", "原销售单", "客户", "明细", "金额", "状态", "制单人"], rows);
+  }
+  function exportCgth() {
+    const rows = (db.purchaseReturns || []).map((d) => [
+      d.date, d.no, d.poNo || "", supplierName(d.supplierId),
+      d.lines.map((l) => (productById(l.productId)?.name || "") + "×" + l.qty).join(" / "),
+      money(lineAmount(d.lines)), d.status, d.createdBy,
+    ]);
+    exportCSV("采购退货明细_" + fmtD(today) + ".csv",
+      ["日期", "退货单号", "原采购单", "供应商", "明细", "金额", "状态", "制单人"], rows);
+  }
+
+  function savePdd(status) {
+    const f = state.pddForm;
+    if (!f) return;
+    const lines = [];
+    let err = null;
+    (f.lines || []).forEach((l, i) => {
+      if (err || !l.productId) return;
+      const p = productById(l.productId);
+      if (!p) return;
+      const real = Number(l.realQty);
+      if (!Number.isFinite(real) || real < 0) {
+        err = "第 " + (i + 1) + " 行：实盘数必须 ≥ 0";
+        return;
+      }
+      lines.push({ productId: l.productId, bookQty: db.stock[l.productId] || 0, realQty: real });
+    });
+    if (err) return alertBox("err", "明细校验未通过", err, "请修改后再保存。");
+    if (!lines.length) return needField("盘点明细（至少一行商品）");
+    const rec = {
+      id: f.id || uid("PDD"),
+      no: f.id ? f.no : nextPddNo(),
+      date: f.date || fmtD(today),
+      warehouse: f.warehouse || "主仓",
+      lines: lines,
+      status: status === "draft" ? "草稿" : "待审核",
+      note: String(f.note || "").trim(),
+      createdBy: db.user.name,
+      createdAt: f.createdAt || Date.now(),
+      timeline: f.timeline || [],
+    };
+    rec.timeline.push({
+      act: status === "draft" ? "录入盘点单" : "提交待审",
+      who: db.user.name,
+      at: Date.now(),
+    });
+    if (f.id) {
+      const i = db.stockChecks.findIndex((x) => x.id === f.id);
+      db.stockChecks[i] = rec;
+    } else {
+      db.stockChecks.unshift(rec);
+    }
+    state.pddForm = null;
+    logAction(status === "draft" ? "新建盘点草稿" : "提交盘点单", rec.no);
+    save();
+    if (status === "draft") {
+      alertBox("ok", "系统提示", "盘点单已保存为草稿", "单号：" + rec.no + "。草稿不改库存。");
+    } else {
+      alertBox("ok", "提交成功", "盘点单已提交待审", "单号：" + rec.no + "。点「模拟仓管确认」后按差异入账。");
+    }
+  }
+
+  function submitPdd(id) {
+    const d = db.stockChecks.find((x) => x.id === id);
+    if (!d || d.status !== "草稿") return;
+    d.status = "待审核";
+    d.timeline = d.timeline || [];
+    d.timeline.push({ act: "提交待审", who: db.user.name, at: Date.now() });
+    logAction("提交盘点单", d.no);
+    save();
+    render();
+  }
+
+  function confirmPdd(id) {
+    const d = db.stockChecks.find((x) => x.id === id);
+    if (!d || d.status !== "待审核") return;
+    if (!confirm("模拟仓管确认后：按实盘数入账差异，库存将被调整。\n确认继续？（实训演示，真实环境由仓管/财务处理）")) return;
+    (d.lines || []).forEach((l) => {
+      const p = productById(l.productId);
+      if (!p) return;
+      const book = Number(l.bookQty) || 0;
+      const real = Number(l.realQty) || 0;
+      const diff = real - book;
+      l.bookQty = book;
+      db.stock[p.id] = real;
+      if (diff !== 0) {
+        db.moves.push({
+          id: uid("M"), date: d.date, type: "盘点调整",
+          productCode: p.code, productName: p.name, unit: p.unit,
+          qty: diff, refNo: d.no, operator: "仓管老黄", note: "盘点差异入账",
+        });
+      }
+    });
+    d.status = "已盘点";
+    d.timeline.push({ act: "模拟仓管确认（差异入账）", who: "仓管老黄", at: Date.now() });
+    logAction("盘点确认", d.no + " 差异入账");
+    save();
+    state.viewDoc = { kind: "pdd", doc: JSON.parse(JSON.stringify(d)) };
+    render();
+    alertBox("ok", "盘点已完成", "盘点差异已入账，库存已按实盘数更新。", "单号：" + d.no);
+  }
+
+  function exportInvSum() {
+    const from = state.f.invFrom, to = state.f.invTo;
+    const rows = invSumRows(from, to);
+    const t = invSumTotal(rows);
+    const data = rows.map((r) => [
+      r.code, r.name, r.unit, r.openQty, r.poIn, r.poOut, r.soOut, r.soIn, r.endQty,
+    ]);
+    data.push(["", "合计", "", t.openQty, t.poIn, t.poOut, t.soOut, t.soIn, t.endQty]);
+    exportCSV("进销存汇总_" + from + "_" + to + ".csv",
+      ["商品编码", "品名", "单位", "期初", "采购入库", "采购退货", "销售出库", "销售退货", "期末"], data);
+    db.flags = db.flags || {};
+    db.flags.exportedInv = true;
+    logAction("导出进销存汇总", from + " ~ " + to);
+    save();
+  }
+
+  function exportReconcile() {
+    const type = state.f.recType;
+    const rows = reconcileRows(type, state.f.recId);
+    const data = type === "supplier"
+      ? rows.map((r) => [r.code, r.name, money(r.buy), money(r.ret), money(r.pay), money(r.bal)])
+      : rows.map((r) => [r.code, r.name, money(r.sell), money(r.ret), money(r.recv), money(r.bal)]);
+    exportCSV(
+      (type === "supplier" ? "供应商对账单_" : "客户对账单_") + fmtD(today) + ".csv",
+      type === "supplier"
+        ? ["编码", "名称", "采购额", "退货额", "模拟付款", "结存"]
+        : ["编码", "名称", "销售额", "退货额", "模拟回款", "结存"],
+      data
+    );
+    logAction("导出往来对账", type === "supplier" ? "供应商对账" : "客户对账");
+    save();
+  }
+
   /* ---------- 弹窗 HTML ---------- */
   function modalHtml() {
     if (!modal.show) return "";
@@ -2299,22 +3829,31 @@
     let body = "";
     switch (state.route) {
       case "home": body = pageHome(); break;
+      case "tasks": body = pageTasks(); break;
+      case "sys-logs": body = pageLogs(); break;
       case "base-products": body = pageProducts(); break;
       case "base-suppliers": body = pageSuppliers(); break;
       case "base-customers": body = pageCustomers(); break;
       case "purchase-list":
       case "purchase-in": body = state.route === "purchase-list" ? pagePurchaseList() : pagePurchaseIn(); break;
+      case "purchase-return": body = pagePurchaseReturnList(); break;
       case "sales-list":
       case "sales-out": body = state.route === "sales-list" ? pageSalesList() : pageSalesOut(); break;
+      case "sales-return": body = pageSalesReturnList(); break;
       case "stock-query": body = pageStockQuery(); break;
       case "stock-alert": body = pageStockAlert(); break;
       case "stock-ledger": body = pageStockLedger(); break;
       case "stock-move": body = pageStockMove(); break;
-      case "stock-check": body = pageStockCheck(); break;
+      case "stock-check":
+        if (state.pddForm) body = pagePddForm();
+        else if (state.viewDoc && state.viewDoc.kind === "pdd") body = pagePddView();
+        else body = pageStockCheck();
+        break;
       case "rpt-center": body = pageReport(); break;
+      case "rpt-invsum": body = pageInvSum(); break;
+      case "rpt-reconcile": body = pageReconcile(); break;
       default: body = pageHome();
     }
-
     const showBack = state.route !== "home";
 
     document.getElementById("app").innerHTML = `
@@ -2368,7 +3907,7 @@
         <span>操作员：${esc(db.user.name)}</span>
         <span>公司：${esc(db.company)}</span>
         <span>日期：${fmtD(today)}</span>
-        <span class="right">文员实训版 · 数据存本机浏览器 · F5 刷新不丢（除非点重置）</span>
+        <span class="right">快捷键：Ctrl+S 保存草稿 · Esc 关弹窗/返回　｜　文员实训版 · 数据存本机浏览器</span>
       </div>
       ${tourHtml()}
       ${modalHtml()}
@@ -2405,6 +3944,14 @@
     else if (id === "f-rptType") state.f.rptType = v;
     else if (id === "f-rptFrom") state.f.rptFrom = v;
     else if (id === "f-rptTo") state.f.rptTo = v;
+    else if (id === "f-xsthQ") state.f.xsthQ = v;
+    else if (id === "f-xsthStatus") state.f.xsthStatus = v;
+    else if (id === "f-cgthQ") state.f.cgthQ = v;
+    else if (id === "f-cgthStatus") state.f.cgthStatus = v;
+    else if (id === "f-invFrom") state.f.invFrom = v;
+    else if (id === "f-invTo") state.f.invTo = v;
+    else if (id === "f-recType") { state.f.recType = v; state.f.recId = ""; if (e.type === "change") render(); return; }
+    else if (id === "f-recId") state.f.recId = v;
     // 商品表单
     else if (state.editProduct) {
       const f = state.editProduct;
@@ -2469,6 +4016,85 @@
       } else return;
       if (e.type === "change") render();
       return;
+    } else if (state.xsthForm) {
+      const f = state.xsthForm;
+      if (id === "xsth-so") {
+        f.soId = v;
+        const so = db.sales.find((x) => x.id === v);
+        if (so) {
+          f.customerId = so.customerId;
+          f.soNo = so.no;
+          f.lines = so.lines.map((l) => ({
+            productId: l.productId,
+            qty: Math.min(1, maxReturnableSO(so, l.productId, f.id) || 1),
+            price: l.price,
+          }));
+        } else {
+          f.soNo = "";
+          f.lines = [{ productId: "", qty: 1, price: 0 }];
+        }
+      } else if (id === "xsth-cus") f.customerId = v;
+      else if (id === "xsth-date") f.date = v;
+      else if (id === "xsth-note") f.note = v;
+      else if (t.dataset.xlineP != null) {
+        const i = +t.dataset.xlineP;
+        f.lines[i].productId = v;
+        const p = productById(v);
+        if (p && !f.lines[i].price) f.lines[i].price = p.price;
+      } else if (t.dataset.xlineQ != null) {
+        f.lines[+t.dataset.xlineQ].qty = Number(v) || 0;
+      } else if (t.dataset.xlinePr != null) {
+        f.lines[+t.dataset.xlinePr].price = Number(v) || 0;
+      } else return;
+      if (e.type === "change") render();
+      return;
+    } else if (state.cgthForm) {
+      const f = state.cgthForm;
+      if (id === "cgth-po") {
+        f.poId = v;
+        const po = db.purchases.find((x) => x.id === v);
+        if (po) {
+          f.supplierId = po.supplierId;
+          f.poNo = po.no;
+          f.lines = po.lines.map((l) => ({
+            productId: l.productId,
+            qty: Math.min(1, maxReturnablePO(po, l.productId, f.id) || 1),
+            price: l.price,
+          }));
+        } else {
+          f.poNo = "";
+          f.lines = [{ productId: "", qty: 1, price: 0 }];
+        }
+      } else if (id === "cgth-sup") f.supplierId = v;
+      else if (id === "cgth-date") f.date = v;
+      else if (id === "cgth-note") f.note = v;
+      else if (t.dataset.clineP != null) {
+        const i = +t.dataset.clineP;
+        f.lines[i].productId = v;
+        const p = productById(v);
+        if (p && !f.lines[i].price) f.lines[i].price = p.cost;
+      } else if (t.dataset.clineQ != null) {
+        f.lines[+t.dataset.clineQ].qty = Number(v) || 0;
+      } else if (t.dataset.clinePr != null) {
+        f.lines[+t.dataset.clinePr].price = Number(v) || 0;
+      } else return;
+      if (e.type === "change") render();
+      return;
+    } else if (state.pddForm) {
+      const f = state.pddForm;
+      if (id === "pdd-date") f.date = v;
+      else if (id === "pdd-wh") f.warehouse = v;
+      else if (id === "pdd-note") f.note = v;
+      else if (t.dataset.plineP != null) {
+        const i = +t.dataset.plineP;
+        f.lines[i].productId = v;
+        const p = productById(v);
+        if (p) f.lines[i].realQty = db.stock[p.id] || 0;
+      } else if (t.dataset.plineQ != null) {
+        f.lines[+t.dataset.plineQ].realQty = Number(v) || 0;
+      } else return;
+      if (e.type === "change") render();
+      return;
     } else {
       return;
     }
@@ -2510,17 +4136,25 @@
         render();
         break;
       case "tour-restart": tourRestart(); break;
-      case "reset-db":
-        if (confirm("确定重置全部演示数据？")) {
+      case "reset-db": {
+        const ok = confirm(
+          "确定重置全部演示数据？\n\n" +
+          "将清空你在本机的全部操作（单据、退货、盘点、日志、导出标记），\n" +
+          "并恢复含「一笔退货、一笔盘点」的初始种子数据。\n" +
+          "此操作不可撤销，建议先导出需要的报表。"
+        );
+        if (ok) {
+          logAction("重置演示数据", "恢复初始种子（含退货/盘点样例）");
+          save();
           db = seed();
           save();
           state.route = "home";
-          state.poForm = state.soForm = state.editProduct = state.viewDoc = null;
+          state.poForm = state.soForm = state.xsthForm = state.cgthForm = state.pddForm = state.editProduct = state.viewDoc = null;
           render();
-          alertBox("ok", "已重置", "演示数据已恢复初始状态。", "");
+          alertBox("ok", "已重置", "演示数据已恢复初始状态（含一笔销售退货、一笔采购退货、一笔盘点）。", "本机操作已清空。");
         }
         break;
-
+      }
       // 商品
       case "prod-search": render(); break;
       case "prod-reset": state.f.prodQ = ""; state.f.prodCat = ""; render(); break;
@@ -2699,6 +4333,170 @@
         state.viewDoc = null;
         render();
         break;
+
+      case "print-doc":
+        printDoc();
+        break;
+
+      /* 销售退货 */
+      case "xsth-search": render(); break;
+      case "xsth-reset": state.f.xsthQ = ""; state.f.xsthStatus = ""; render(); break;
+      case "new-xsth":
+        state.route = "sales-return";
+        state.xsthForm = {
+          id: null, no: peekXsthNo(), date: fmtD(today),
+          customerId: "", soId: "", soNo: "",
+          lines: [{ productId: "", qty: 1, price: 0 }],
+          note: "",
+        };
+        render();
+        break;
+      case "view-xsth": {
+        const d = (db.salesReturns || []).find((x) => x.id === id);
+        if (d) { state.viewDoc = { kind: "xsth", doc: JSON.parse(JSON.stringify(d)) }; render(); }
+        break;
+      }
+      case "edit-xsth": {
+        const d = (db.salesReturns || []).find((x) => x.id === id);
+        if (!d) break;
+        if (d.status !== "草稿") { alertBox("warn", "系统提示", "该退货单不是草稿，文员不可编辑。", "单号：" + d.no + "　状态：" + d.status); break; }
+        state.xsthForm = JSON.parse(JSON.stringify(d));
+        state.viewDoc = null;
+        state.route = "sales-return";
+        render();
+        break;
+      }
+      case "cancel-xsth": state.xsthForm = null; render(); break;
+      case "xsth-add-line":
+        state.xsthForm.lines.push({ productId: "", qty: 1, price: 0 });
+        render();
+        break;
+      case "xsth-del-line":
+        state.xsthForm.lines.splice(+el.dataset.i, 1);
+        if (!state.xsthForm.lines.length) state.xsthForm.lines.push({ productId: "", qty: 1, price: 0 });
+        render();
+        break;
+      case "save-xsth-draft": syncXsthLines(); saveXsth("draft"); break;
+      case "save-xsth-submit": syncXsthLines(); saveXsth("submit"); break;
+      case "submit-xsth": submitXsth(id); break;
+      case "confirm-xsth": confirmXsth(id); break;
+      case "xsth-export": exportXsth(); break;
+
+      /* 采购退货 */
+      case "cgth-search": render(); break;
+      case "cgth-reset": state.f.cgthQ = ""; state.f.cgthStatus = ""; render(); break;
+      case "new-cgth":
+        state.route = "purchase-return";
+        state.cgthForm = {
+          id: null, no: peekCgthNo(), date: fmtD(today),
+          supplierId: "", poId: "", poNo: "",
+          lines: [{ productId: "", qty: 1, price: 0 }],
+          note: "",
+        };
+        render();
+        break;
+      case "view-cgth": {
+        const d = (db.purchaseReturns || []).find((x) => x.id === id);
+        if (d) { state.viewDoc = { kind: "cgth", doc: JSON.parse(JSON.stringify(d)) }; render(); }
+        break;
+      }
+      case "edit-cgth": {
+        const d = (db.purchaseReturns || []).find((x) => x.id === id);
+        if (!d) break;
+        if (d.status !== "草稿") { alertBox("warn", "系统提示", "该退货单不是草稿，文员不可编辑。", "单号：" + d.no + "　状态：" + d.status); break; }
+        state.cgthForm = JSON.parse(JSON.stringify(d));
+        state.viewDoc = null;
+        state.route = "purchase-return";
+        render();
+        break;
+      }
+      case "cancel-cgth": state.cgthForm = null; render(); break;
+      case "cgth-add-line":
+        state.cgthForm.lines.push({ productId: "", qty: 1, price: 0 });
+        render();
+        break;
+      case "cgth-del-line":
+        state.cgthForm.lines.splice(+el.dataset.i, 1);
+        if (!state.cgthForm.lines.length) state.cgthForm.lines.push({ productId: "", qty: 1, price: 0 });
+        render();
+        break;
+      case "save-cgth-draft": syncCgthLines(); saveCgth("draft"); break;
+      case "save-cgth-submit": syncCgthLines(); saveCgth("submit"); break;
+      case "submit-cgth": submitCgth(id); break;
+      case "confirm-cgth": confirmCgth(id); break;
+      case "cgth-export": exportCgth(); break;
+
+      /* 盘点 */
+      case "new-pdd":
+        state.route = "stock-check";
+        state.pddForm = {
+          id: null, no: peekPddNo(), date: fmtD(today), warehouse: "主仓",
+          lines: [{ productId: "", realQty: 0 }],
+          note: "",
+        };
+        render();
+        break;
+      case "view-pdd": {
+        const d = (db.stockChecks || []).find((x) => x.id === id);
+        if (d) { state.viewDoc = { kind: "pdd", doc: JSON.parse(JSON.stringify(d)) }; render(); }
+        break;
+      }
+      case "edit-pdd": {
+        const d = (db.stockChecks || []).find((x) => x.id === id);
+        if (!d) break;
+        if (d.status !== "草稿") { alertBox("warn", "系统提示", "该盘点单不是草稿，文员不可编辑。", "单号：" + d.no); break; }
+        state.pddForm = JSON.parse(JSON.stringify(d));
+        state.viewDoc = null;
+        state.route = "stock-check";
+        render();
+        break;
+      }
+      case "cancel-pdd": state.pddForm = null; render(); break;
+      case "pdd-add-line":
+        state.pddForm.lines.push({ productId: "", realQty: 0 });
+        render();
+        break;
+      case "pdd-del-line":
+        state.pddForm.lines.splice(+el.dataset.i, 1);
+        if (!state.pddForm.lines.length) state.pddForm.lines.push({ productId: "", realQty: 0 });
+        render();
+        break;
+      case "save-pdd-draft": syncPddLines(); savePdd("draft"); break;
+      case "save-pdd-submit": syncPddLines(); savePdd("submit"); break;
+      case "submit-pdd": submitPdd(id); break;
+      case "confirm-pdd": confirmPdd(id); break;
+
+      /* 进销存汇总 / 对账 */
+      case "invsum-search": render(); break;
+      case "invsum-reset":
+        state.f.invFrom = daysAgo(30);
+        state.f.invTo = fmtD(today);
+        render();
+        break;
+      case "invsum-export": exportInvSum(); break;
+      case "rec-search": render(); break;
+      case "rec-reset":
+        state.f.recType = "supplier";
+        state.f.recId = "";
+        render();
+        break;
+      case "rec-export": exportReconcile(); break;
+
+      /* 任务 / 日志 */
+      case "close-task-guide":
+        db.taskGuideClosed = true;
+        save();
+        render();
+        break;
+      case "open-task-guide":
+        db.taskGuideClosed = false;
+        save();
+        render();
+        break;
+
+      case "perm-stocktake-edit":
+        noPermission("直接改写库存 / 盘点差异入账（请用模拟仓管确认演示）");
+        break;
     }
   }
 
@@ -2742,12 +4540,41 @@
     app.addEventListener("click", onClick);
     bindInputs(app);
 
+    document.addEventListener("keydown", function (e) {
+      const tag = (e.target && e.target.tagName) || "";
+      const inField = tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA";
+      if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        if (state.poForm) { syncPOLines(); savePO("draft"); return; }
+        if (state.soForm) { syncSOLines(); saveSO("draft"); return; }
+        if (state.xsthForm) { syncXsthLines(); saveXsth("draft"); return; }
+        if (state.cgthForm) { syncCgthLines(); saveCgth("draft"); return; }
+        if (state.pddForm) { syncPddLines(); savePdd("draft"); return; }
+        alertBox("info", "快捷键 Ctrl+S", "当前没有可保存的表单。", "请先打开采购/销售/退货/盘点单据的编辑页。");
+        return;
+      }
+      if (e.key === "Escape") {
+        if (modal.show) { closeModal(); return; }
+        if (state.viewDoc) { state.viewDoc = null; render(); return; }
+        if (state.poForm) { state.poForm = null; render(); return; }
+        if (state.soForm) { state.soForm = null; render(); return; }
+        if (state.xsthForm) { state.xsthForm = null; render(); return; }
+        if (state.cgthForm) { state.cgthForm = null; render(); return; }
+        if (state.pddForm) { state.pddForm = null; render(); return; }
+        if (state.editProduct || state.editSupplier || state.editCustomer) {
+          state.editProduct = state.editSupplier = state.editCustomer = null;
+          render();
+          return;
+        }
+        if (inField) e.target.blur();
+      }
+    });
+
     if (db.tourOn && TOUR[db.tourStep || 0]) {
       state.route = TOUR[db.tourStep || 0].route;
     }
     render();
   }
-
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);
   } else {
