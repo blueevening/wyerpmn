@@ -3888,7 +3888,7 @@
         <div class="name">管家婆辉煌版 · 网页实训后台</div>
         <div class="co">${esc(db.company)}</div>
         <div class="user">登录：<b>${esc(db.user.name)}</b>（${esc(db.user.role)}）　|　账套：2026演示
-          <button class="role-toggle ${isManager() ? "on" : ""}" onclick="toggleRole()">${isManager() ? "切回文员" : "切换主管"}</button>
+          <button class="role-toggle ${isManager() ? "on" : ""}" data-act="toggle-role">${isManager() ? "切回文员" : "切换主管"}</button>
         </div>
       </div>
       <div class="menubar">
@@ -4251,6 +4251,10 @@
         exportCSV("采购单列表.csv", ["单号", "供应商", "日期", "数量", "金额", "状态", "制单人"], rows);
         break;
       }
+      case "toggle-role":
+        toggleRole();
+        break;
+
       case "perm-approve":
         if (!isManager()) {
           noPermission("审核采购/销售单据、单据生效、红冲单据");
