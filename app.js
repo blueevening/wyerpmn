@@ -329,7 +329,7 @@
       logs,
       counters: { po: 3, so: 3, xsth: 1, cgth: 1, pdd: 1 },
       flags: { exportedInv: false },
-      user: { name: "文员小陈", role: "商务文员" },
+      user: { name: "文员小陈", role: "商务文员", mode: "clerk" },
       company: "广西老街坊商贸有限公司",
       tourOn: true,
       tourStep: 0,
@@ -525,11 +525,20 @@
     return new Set((src && src.lines ? src.lines : []).map((l) => l.productId));
   }
 
+  function isManager() { return db.user.mode === "manager"; }
+  function toggleRole() {
+    db.user.mode = isManager() ? "clerk" : "manager";
+    db.user.name = isManager() ? "主管李姐" : "文员小陈";
+    db.user.role = isManager() ? "财务主管" : "商务文员";
+    save();
+    logAction("切换角色为「" + db.user.role + "」", "");
+    render();
+  }
   function noPermission(what) {
     alertBox(
       "warn",
       "权限不足",
-      "当前账号「文员小陈」权限不足，无法执行该操作。",
+      "当前账号「" + db.user.name + "」权限不足，无法执行该操作。",
       what
         ? "禁止操作：" + what + "。文员仅可进行资料维护、单据录入（草稿/提交）、查询与导出，不可财务审核、成本结转、红冲、收付款核销、直接调整库存。"
         : "文员仅可进行资料维护、单据录入（草稿/提交）、查询与导出。"
@@ -997,7 +1006,7 @@
   function statusClass(st) {
     if (st === "草稿") return "st-draft";
     if (st === "待审核") return "st-pending";
-    if (st === "待出库") return "st-wait";
+    if (st === "待入库" || st === "待出库") return "st-wait";
     if (st === "已审核") return "st-approved";
     if (st === "已入库" || st === "已出库" || st === "已退货" || st === "已盘点") return "st-executed";
     if (st === "部分出库") return "st-partial";
@@ -2070,7 +2079,12 @@
           ${timelineHtml(d.timeline)}
           ${
             d.status === "待审核"
-              ? `<div class="notice-warn">待财务审核。你可以点「模拟财务审核」看看无权限提示（文员真实环境不能审核）。</div>`
+              ? `<div class="notice-warn">${isManager() ? "主管模式：可直接点击「主管审核」按钮审核此单据。" : "待主管审核。请切换到主管角色后审核。"}</div>`
+              : ""
+          }
+          ${
+            d.status === "待入库"
+              ? `<div class="notice-info">审核通过，请确认入库后更新库存。</div>`
               : ""
           }
           <div class="sign-row">
@@ -2083,7 +2097,8 @@
         <div class="box-ft no-print">
           <button class="btn" data-act="close-view">返回列表</button>
           ${d.status === "草稿" ? `<button class="btn btn-primary" data-act="edit-po" data-id="${esc(d.id)}">编辑草稿</button>` : ""}
-          <button class="btn" data-act="perm-approve">模拟财务审核</button>
+          ${d.status === "待审核" ? `<button class="btn btn-primary" data-act="perm-approve">${isManager() ? "主管审核" : "模拟财务审核"}</button>` : ""}
+          ${d.status === "待入库" ? `<button class="btn btn-success" data-act="po-receive">确认入库</button>` : ""}
           <button class="btn" data-act="print-doc">打印</button>
         </div>
       </div>
@@ -2293,6 +2308,16 @@
           </div>
           <div style="margin-top:12px"><b>操作时间线</b></div>
           ${timelineHtml(d.timeline)}
+          ${
+            d.status === "待审核"
+              ? `<div class="notice-warn">${isManager() ? "主管模式：可直接点击「主管审核」按钮审核此单据。" : "待主管审核。请切换到主管角色后审核。"}</div>`
+              : ""
+          }
+          ${
+            d.status === "待出库"
+              ? `<div class="notice-info">审核通过，请确认出库后扣减库存。</div>`
+              : ""
+          }
           <div class="sign-row">
             <div>制单人：____________</div>
             <div>审核人：____________</div>
@@ -2303,7 +2328,8 @@
         <div class="box-ft no-print">
           <button class="btn" data-act="close-view">返回列表</button>
           ${d.status === "草稿" ? `<button class="btn btn-primary" data-act="edit-so" data-id="${esc(d.id)}">编辑草稿</button>` : ""}
-          <button class="btn" data-act="perm-writeoff">收款核销</button>
+          ${d.status === "待审核" ? `<button class="btn btn-primary" data-act="perm-approve">${isManager() ? "主管审核" : "模拟财务审核"}</button>` : ""}
+          ${d.status === "待出库" ? `<button class="btn btn-success" data-act="so-ship">确认出库</button>` : ""}
           <button class="btn" data-act="print-doc">打印</button>
         </div>
       </div>
@@ -3861,7 +3887,9 @@
         <div class="logo">婆</div>
         <div class="name">管家婆辉煌版 · 网页实训后台</div>
         <div class="co">${esc(db.company)}</div>
-        <div class="user">登录：<b>${esc(db.user.name)}</b>（${esc(db.user.role)}）　|　账套：2026演示</div>
+        <div class="user">登录：<b>${esc(db.user.name)}</b>（${esc(db.user.role)}）　|　账套：2026演示
+          <button class="role-toggle ${isManager() ? "on" : ""}" onclick="toggleRole()">${isManager() ? "切回文员" : "切换主管"}</button>
+        </div>
       </div>
       <div class="menubar">
         ${MENUS.map(
@@ -3878,7 +3906,7 @@
           .join("")}
         <span class="sep"></span>
         <button class="sb" data-nav="home">返回工作台</button>
-        <span class="home-hint">文员权限：录入 / 查询 / 导出　｜　无财务审核·成本·凭证权限</span>
+        <span class="home-hint">${isManager() ? "主管权限：审核单据 / 入库确认 / 出库发货 / 报表查看" : "文员权限：录入 / 查询 / 导出　｜　无财务审核·成本·凭证权限"}</span>
       </div>
       <div class="shell">
         <aside class="side">
@@ -4224,8 +4252,115 @@
         break;
       }
       case "perm-approve":
-        noPermission("审核采购/销售单据、单据生效、红冲单据");
+        if (!isManager()) {
+          noPermission("审核采购/销售单据、单据生效、红冲单据");
+          break;
+        }
+        // 主管执行审核
+        if (state.viewDoc) {
+          const { kind, doc } = state.viewDoc;
+          if (doc.status !== "待审核") {
+            alertBox("warn", "系统提示", "只有待审核状态的单据才能审核", "当前状态：" + doc.status);
+            break;
+          }
+          if (kind === "po") {
+            // 采购单审核 → 待入库
+            const idx = db.purchases.findIndex((x) => x.id === doc.id);
+            if (idx >= 0) {
+              db.purchases[idx].status = "待入库";
+              db.purchases[idx].timeline.push({ act: "主管审核通过", who: db.user.name, at: Date.now() });
+              state.viewDoc.doc = db.purchases[idx];
+            }
+            logAction("审核采购单", doc.no + " → 待入库");
+            alertBox("ok", "审核通过", "采购单已审核", "单号：" + doc.no + "　状态：待入库　请确认入库后更新库存。");
+          } else if (kind === "so") {
+            // 销售单审核 → 待出库
+            const idx = db.sales.findIndex((x) => x.id === doc.id);
+            if (idx >= 0) {
+              db.sales[idx].status = "待出库";
+              db.sales[idx].timeline.push({ act: "主管审核通过", who: db.user.name, at: Date.now() });
+              state.viewDoc.doc = db.sales[idx];
+            }
+            logAction("审核销售单", doc.no + " → 待出库");
+            alertBox("ok", "审核通过", "销售单已审核", "单号：" + doc.no + "　状态：待出库　请确认出库后扣减库存。");
+          }
+          save();
+          render();
+        }
         break;
+
+      // 采购入库确认
+      case "po-receive": {
+        if (!state.viewDoc || state.viewDoc.kind !== "po") break;
+        const doc = state.viewDoc.doc;
+        if (doc.status !== "待入库") break;
+        // 更新库存
+        doc.lines.forEach((l) => {
+          db.stock[l.productId] = (db.stock[l.productId] || 0) + l.qty;
+        });
+        // 记录出入库流水
+        doc.lines.forEach((l) => {
+          db.moves.unshift({
+            id: uid("MV"), productId: l.productId, kind: "采购入库",
+            qty: l.qty, date: doc.date, refNo: doc.no, at: Date.now(),
+          });
+        });
+        // 更新单据状态
+        const idx = db.purchases.findIndex((x) => x.id === doc.id);
+        if (idx >= 0) {
+          db.purchases[idx].status = "已入库";
+          db.purchases[idx].timeline.push({ act: "确认入库", who: db.user.name, at: Date.now() });
+          state.viewDoc.doc = db.purchases[idx];
+        }
+        logAction("采购入库", doc.no + "　入库" + doc.lines.reduce((s,l)=>s+l.qty,0) + "件");
+        alertBox("ok", "入库成功", "采购单已入库", "单号：" + doc.no + "　库存已更新。");
+        save();
+        render();
+        break;
+      }
+
+      // 销售出库确认
+      case "so-ship": {
+        if (!state.viewDoc || state.viewDoc.kind !== "so") break;
+        const doc = state.viewDoc.doc;
+        if (doc.status !== "待出库") break;
+        // 检查库存是否充足
+        let insufficient = [];
+        doc.lines.forEach((l) => {
+          const stock = db.stock[l.productId] || 0;
+          if (stock < l.qty) {
+            const p = productById(l.productId);
+            insufficient.push((p?.name || l.productId) + "（需" + l.qty + "，现" + stock + "）");
+          }
+        });
+        if (insufficient.length > 0) {
+          alertBox("err", "库存不足", "以下商品库存不足，无法出库", insufficient.join("\n"));
+          break;
+        }
+        // 扣减库存
+        doc.lines.forEach((l) => {
+          db.stock[l.productId] = (db.stock[l.productId] || 0) - l.qty;
+        });
+        // 记录出入库流水
+        doc.lines.forEach((l) => {
+          db.moves.unshift({
+            id: uid("MV"), productId: l.productId, kind: "销售出库",
+            qty: -l.qty, date: doc.date, refNo: doc.no, at: Date.now(),
+          });
+        });
+        // 更新单据状态
+        const idx = db.sales.findIndex((x) => x.id === doc.id);
+        if (idx >= 0) {
+          db.sales[idx].status = "已出库";
+          db.sales[idx].timeline.push({ act: "确认出库", who: db.user.name, at: Date.now() });
+          state.viewDoc.doc = db.sales[idx];
+        }
+        logAction("销售出库", doc.no + "　出库" + doc.lines.reduce((s,l)=>s+l.qty,0) + "件");
+        alertBox("ok", "出库成功", "销售单已出库", "单号：" + doc.no + "　库存已扣减。");
+        save();
+        render();
+        break;
+      }
 
       // 销售
       case "so-search": render(); break;
