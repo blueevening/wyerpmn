@@ -1474,6 +1474,8 @@
     const draftSo = db.sales.filter((p) => p.status === "草稿").length;
     const lows = lowStockList();
     const totalSku = db.products.filter((p) => p.active).length;
+    const donePo = db.purchases.filter((p) => p.status === "已入库").length;
+    const doneSo = db.sales.filter((p) => p.status === "已出库").length;
 
     const recent = [
       ...db.purchases.map((d) => ({ ...d, kind: "采购", party: supplierName(d.supplierId) })),
@@ -1484,14 +1486,15 @@
 
     return `
       <div class="welcome">
-        <div class="av">文员</div>
+        <div class="av">${isManager() ? "主管" : "文员"}</div>
         <div>
           <h2>您好，${esc(db.user.name)} · ${esc(db.user.role)}</h2>
           <p>公司：${esc(db.company)}　｜　今日：${fmtD(today)}<br/>
-          您可进行：基础资料维护、采购/销售单据录入（草稿或提交）、库存与单据查询、业务报表导出。<br/>
-          您不能：财务审核、成本结转、凭证记账、红冲单据、收付款核销、直接调整库存。</p>
+          ${isManager()
+            ? "您可进行：单据审核、入库确认、出库发货、报表查看与导出。<br/>主管模式下可完成文员不能做的审核与库存操作。"
+            : "您可进行：基础资料维护、采购/销售单据录入（草稿或提交）、库存与单据查询、业务报表导出。<br/>您不能：财务审核、成本结转、凭证记账、红冲单据、收付款核销、直接调整库存。"}</p>
         </div>
-        <div class="perm">权限说明<br/>账号类型：商务文员（基础业务）<br/>财务审核：无权限<br/>成本/凭证：无权限<br/>库存调整：无权限</div>
+        <div class="perm">${isManager() ? "主管权限说明<br/>单据审核：有权限<br/>入库/出库确认：有权限<br/>报表查看：有权限" : "权限说明<br/>账号类型：商务文员（基础业务）<br/>财务审核：无权限<br/>成本/凭证：无权限<br/>库存调整：无权限"}</div>
       </div>
 
       ${taskBannerHtml()}
@@ -1506,15 +1509,15 @@
           <div class="v">${pendingSo}</div>
           <div class="h">草稿另有 ${draftSo} 张</div>
         </div>
-        <div class="dash-card ${lows.length ? "warn" : "ok"}">
+        <div class="dash-card ok" style="cursor:pointer" data-nav="stock-query">
           <div class="k">库存预警 SKU</div>
           <div class="v">${lows.length}</div>
-          <div class="h">在售商品 ${totalSku} 种</div>
+          <div class="h">在售商品 ${totalSku} 种 · 点击查看</div>
         </div>
-        <div class="dash-card ok">
-          <div class="k">本月操作提示</div>
-          <div class="v" style="font-size:14px;padding-top:6px">录入·查询·导出</div>
-          <div class="h">财务审核由主管账号完成</div>
+        <div class="dash-card">
+          <div class="k">累计已完成单据</div>
+          <div class="v" style="color:var(--ink2)">${donePo + doneSo}</div>
+          <div class="h">入库 ${donePo} 笔 · 出库 ${doneSo} 笔</div>
         </div>
       </div>
       <div class="dash-2">
