@@ -320,16 +320,16 @@
       suppliers,
       customers,
       stock,
-      purchases: [],
-      sales: [],
-      salesReturns: [],
-      purchaseReturns: [],
-      stockChecks: [],
+      purchases: [po1, po2, po3],
+      sales: [so1, so2, so3],
+      salesReturns: [xsth1],
+      purchaseReturns: [cgth1],
+      stockChecks: [pdd1],
       moves,
-      logs: [],
-      counters: { po: 0, so: 0, xsth: 0, cgth: 0, pdd: 0 },
+      logs,
+      counters: { po: 3, so: 3, xsth: 1, cgth: 1, pdd: 1 },
       flags: { exportedInv: false },
-      user: { name: "文员小陈", role: "商务文员", mode: "clerk" },
+      user: { name: "文员小陈", role: "商务文员" },
       company: "广西老街坊商贸有限公司",
       tourOn: true,
       tourStep: 0,
@@ -525,20 +525,11 @@
     return new Set((src && src.lines ? src.lines : []).map((l) => l.productId));
   }
 
-  function isManager() { return db.user.mode === "manager"; }
-  function toggleRole() {
-    db.user.mode = isManager() ? "clerk" : "manager";
-    db.user.name = isManager() ? "主管李姐" : "文员小陈";
-    db.user.role = isManager() ? "财务主管" : "商务文员";
-    save();
-    logAction("切换角色为「" + db.user.role + "」", "");
-    render();
-  }
   function noPermission(what) {
     alertBox(
       "warn",
       "权限不足",
-      "当前账号「" + db.user.name + "」权限不足，无法执行该操作。",
+      "当前账号「文员小陈」权限不足，无法执行该操作。",
       what
         ? "禁止操作：" + what + "。文员仅可进行资料维护、单据录入（草稿/提交）、查询与导出，不可财务审核、成本结转、红冲、收付款核销、直接调整库存。"
         : "文员仅可进行资料维护、单据录入（草稿/提交）、查询与导出。"
@@ -546,15 +537,128 @@
   }
 
   /* ---------- 教程 ---------- */
+  /* 每步 text 支持 \n 换行；写法统一为：点左侧菜单 → 点页面按钮 → 填哪个字段 → 点哪个保存 */
   const TOUR = [
-    { route: "home", title: "欢迎使用管家婆辉煌版", text: "你是「商务文员」账号。左侧与上方是导航；二级页面都有「返回」。点右下角「下一步」跟着练。" },
-    { route: "base-products", title: "① 基础资料·商品档案", text: "点「新增商品」，填写品名「原味花生」、单位「包」、分类「农副食品」。保存后点「返回工作台」。" },
-    { route: "purchase-list", title: "② 采购管理", text: "可查看采购单。点「新增采购订单」只能保存为草稿或提交待审核——你不能审核，财务才能审。" },
-    { route: "sales-list", title: "③ 销售管理", text: "点「新增销售订单」，选客户、选商品、填数量。状态有：草稿/待审核/待出库/部分出库/已出库。" },
-    { route: "stock-query", title: "④ 库存查询", text: "实时库存可按品名/SKU筛选。库存预警里低于最低库存的会标红。你不能直接改库存。" },
-    { route: "stock-move", title: "⑤ 出入库流水", text: "按日期筛选台账流水，核对单据与数量。支持导出。" },
-    { route: "rpt-center", title: "⑥ 报表中心", text: "选报表类型和起止日期，点「预览」再「导出Excel」。只能看和导，不能改原始数据。" },
-    { route: "home", title: "⑦ 练习完成", text: "可对照练习指令：新增商品→建销售草稿单→查库存预警→导出报表。试试超出权限的操作会弹什么提示。" },
+    {
+      route: "home",
+      title: "第 0 步 · 认识界面",
+      text: "你登录的是「商务文员」账号。\n" +
+            "① 顶部蓝色横条是主菜单：工作台 / 基础资料 / 采购管理 / 销售管理 / 库存管理 / 报表中心。\n" +
+            "② 左侧灰色竖条是二级菜单，会随顶部菜单变化。\n" +
+            "③ 右侧主区域就是你要操作的页面。\n" +
+            "④ 右下角这个小卡片就是教程，点「下一步」开始练。",
+    },
+    {
+      route: "base-products",
+      title: "第 1 步 · 新增商品档案",
+      text: "现在你在「基础资料 → 商品档案」页。\n" +
+            "① 点右上角蓝色按钮【+ 新增商品】。\n" +
+            "② 在弹出的表单里依次填：\n" +
+            "   · 商品编码*：打 SP001\n" +
+            "   · 品名*：打 原味花生\n" +
+            "   · 规格：打 500g/包\n" +
+            "   · 单位*：打 包\n" +
+            "   · 分类：打 农副食品\n" +
+            "   · 最低库存：打 10\n" +
+            "③ 拉到底部，点蓝色按钮【保存】。\n" +
+            "④ 保存后会自动回到商品列表，能看到刚加的那一行。",
+    },
+    {
+      route: "base-suppliers",
+      title: "第 2 步 · 新增供应商",
+      text: "现在你在「基础资料 → 供应商资料」页。\n" +
+            "① 点右上角蓝色按钮【+ 新增供应商】。\n" +
+            "② 填写：\n" +
+            "   · 编码*：打 GYS001\n" +
+            "   · 名称*：打 南宁桂味食品批发部\n" +
+            "   · 联系人：打 李经理\n" +
+            "   · 电话：打 13800001111\n" +
+            "③ 点底部【保存】。\n" +
+            "（客户资料同理，菜单切到「客户资料」再【+ 新增客户】。）",
+    },
+    {
+      route: "purchase-list",
+      title: "第 3 步 · 录一张采购订单",
+      text: "现在你在「采购管理 → 采购订单」页。\n" +
+            "① 点右上角蓝色按钮【+ 新增采购订单】。\n" +
+            "② 在「供应商*」下拉里选刚建的「南宁桂味食品批发部」。\n" +
+            "③ 单据日期保持今天即可。\n" +
+            "④ 在「商品明细」右边点【+ 添加行】：\n" +
+            "   · 商品列下拉选「原味花生」\n" +
+            "   · 数量列打 100\n" +
+            "   · 单价列打 4.5\n" +
+            "⑤ 拉到底部，点蓝色按钮【保存并提交审核】。\n" +
+            "⚠ 新单状态会停在「待审核」——真实环境由财务审核、仓管入库，文员没权限点。\n" +
+            "⑥ 想看到「已入库」长啥样，在列表里点开演示自带的 CGRK 开头单据，看底部「操作时间线」。",
+    },
+    {
+      route: "sales-list",
+      title: "第 4 步 · 录一张销售订单",
+      text: "现在你在「销售管理 → 销售订单」页。\n" +
+            "① 点右上角蓝色按钮【+ 新增销售订单】。\n" +
+            "② 在「客户*」下拉里选「老街坊便利店（建政店）」。\n" +
+            "③ 点商品明细区的【+ 添加行】：\n" +
+            "   · 商品选「原味花生」\n" +
+            "   · 数量打 20（别超过「可用库存」列数字，否则会红字警告超卖）\n" +
+            "   · 单价打 6.0\n" +
+            "④ 点底部蓝色【保存并提交审核】。\n" +
+            "⚠ 状态流转：草稿 → 待审核 → 待出库 → 部分出库/已出库。你只能录草稿和提交。\n" +
+            "⑤ 列表里点开演示自带的「已出库」单，看底部明细里的「当前库存」列，就是出库后剩下的。",
+    },
+    {
+      route: "stock-query",
+      title: "第 5 步 · 查实时库存",
+      text: "现在你在「库存管理 → 实时库存」页。\n" +
+            "① 在「品名/编码」框里打 花生，点【查询】。\n" +
+            "② 列表会过滤出含「花生」的商品，看「当前库存」列。\n" +
+            "③ 想导出这张表，点右上角【导出库存表】，浏览器会下载一个 CSV 文件。\n" +
+            "④ 左侧菜单切到「库存预警」，低于「最低库存」的行会标红——这就是要补货的清单。\n" +
+            "⚠ 文员不能直接改库存数字，只能看和导。",
+    },
+    {
+      route: "stock-move",
+      title: "第 6 步 · 看出入库流水",
+      text: "现在你在「库存管理 → 出入库流水」页。\n" +
+            "① 顶部有「开始日期」和「结束日期」两个日期框，选一段区间，比如这个月 1 号到今天。\n" +
+            "② 点【查询】，下方表格会列出这段时间所有入库/出库/退货记录。\n" +
+            "③ 每条流水都带「单据号」，点开能反查原单。\n" +
+            "④ 点右上角【导出】可以把流水下载成 CSV。\n" +
+            "左侧菜单「库存台账」是按商品维度汇总，可对照着看。",
+    },
+    {
+      route: "rpt-center",
+      title: "第 7 步 · 出一张业务报表",
+      text: "现在你在「报表中心 → 业务报表」页。\n" +
+            "① 「报表类型」下拉三选一：\n" +
+            "   · 商品库存表\n" +
+            "   · 客户销售明细表\n" +
+            "   · 采购明细表\n" +
+            "② 选「客户销售明细表」。\n" +
+            "③ 起止日期选最近一个月。\n" +
+            "④ 先点【预览】看下面表格有没有数据。\n" +
+            "⑤ 再点蓝色【导出Excel】，会下载 CSV（用 Excel 打开就是表格）。\n" +
+            "⚠ 页面底部那个【修改报表数据】按钮点了会弹权限提示——报表只能看不能改。",
+    },
+    {
+      route: "rpt-invsum",
+      title: "第 8 步 · 进销存汇总（实训 L6）",
+      text: "现在你在「报表中心 → 进销存汇总」页。\n" +
+            "① 这张表的公式：期初 + 采购入库 − 采购退货 − 销售出库 + 销售退货 = 期末。\n" +
+            "② 选好「起始日期」和「截止日期」，点【查询】。\n" +
+            "③ 下方表格会列出每个商品的期初、入库、出库、期末数量。\n" +
+            "④ 点蓝色【导出 CSV】——导出成功后，工作台「实训任务卡」的 L6 会自动打勾。",
+    },
+    {
+      route: "home",
+      title: "第 9 步 · 对照任务卡自检",
+      text: "回到工作台了。\n" +
+            "① 看「实训任务卡 L1–L6」：绿色 ✓ 就是已完成。\n" +
+            "② 没打勾的，点任务卡上的【去完成】按钮，会自动跳到对应页面。\n" +
+            "③ 左侧菜单切到「实训任务」可以看完整任务列表和完成进度条。\n" +
+            "④ 左侧菜单切到「操作日志」能看到你刚才每一步都干了啥。\n" +
+            "⑤ 想重看教程，点左下角【分步教程】；想清空数据重来，点【重置演示数据】。\n" +
+            "🎉 练完这 10 步，文员日常活就都摸过一遍了。",
+    },
   ];
 
   function tourNext() {
@@ -888,12 +992,12 @@
     const hasCheck = (db.stockChecks || []).length > 0;
     const exported = !!(db.flags && db.flags.exportedInv);
     return [
-      { id: "L1", title: "商品 + 供应商建档", desc: "在基础资料中建立商品档案与供应商资料", done: db.products.length > 0 && db.suppliers.length > 0, nav: "base-products" },
-      { id: "L2", title: "采购入库", desc: "录入采购单并完成入库（模拟仓管确认）", done: hasPO, nav: "purchase-list" },
-      { id: "L3", title: "销售出库", desc: "录入销售单并完成出库（注意防超卖）", done: hasSO, nav: "sales-list" },
-      { id: "L4", title: "销售退货", desc: "开销售退货单并模拟仓管确认，库存回加", done: hasReturn, nav: "sales-return" },
-      { id: "L5", title: "盘点", desc: "录入盘点单提交待审 / 模拟仓管确认差异", done: hasCheck, nav: "stock-check" },
-      { id: "L6", title: "导出进销存汇总", desc: "在报表中心导出进销存汇总 CSV", done: exported, nav: "rpt-invsum" },
+      { id: "L1", title: "商品 + 供应商建档", desc: "左侧「基础资料 → 商品档案」点【+ 新增商品】，填编码/品名/单位后【保存】；再切到「供应商资料」点【+ 新增供应商】，填编码/名称后【保存】。两边各至少 1 条即完成。", done: db.products.length > 0 && db.suppliers.length > 0, nav: "base-products" },
+      { id: "L2", title: "采购入库", desc: "左侧「采购管理 → 采购订单」点【+ 新增采购订单】，选供应商、点【+ 添加行】选商品填数量，点蓝色【保存并提交审核】。新单状态会停在「待审核」（真实环境由财务审核→仓管入库）。演示数据已自带 2 张「已入库」单，可点开看时间线。", done: hasPO, nav: "purchase-list" },
+      { id: "L3", title: "销售出库", desc: "左侧「销售管理 → 销售订单」点【+ 新增销售订单】，选客户、点【+ 添加行】选商品填数量（别超「可用库存」列数字），点蓝色【保存并提交审核】。演示数据已自带「已出库」和「部分出库」单各 1 张，可点开核对库存变动。", done: hasSO, nav: "sales-list" },
+      { id: "L4", title: "销售退货", desc: "左侧「销售管理 → 销售退货」点【+ 新增销售退货单】，「原销售单」下拉选一张已出库单（会自动带客户和可退数量），点【+ 添加行】填退货数量，点蓝色【提交待审】；打开这张退货单，点底部【模拟仓管确认（库存回加）】，状态变「已退货」即完成。", done: hasReturn, nav: "sales-return" },
+      { id: "L5", title: "盘点", desc: "左侧「库存管理 → 盘点单」点【+ 新增盘点单】，点【+ 添加行】选一个商品，在「实盘数」列填一个和账面数不一样的数字，点蓝色【提交待审】；打开盘点单，点底部【模拟仓管确认（差异入账）】，系统按差异调整库存并生成流水。", done: hasCheck, nav: "stock-check" },
+      { id: "L6", title: "导出进销存汇总", desc: "左侧「报表中心 → 进销存汇总」，选起始日期和截止日期，点【查询】确认下面有数据，再点蓝色【导出 CSV】按钮，浏览器下载文件后即完成。", done: exported, nav: "rpt-invsum" },
     ];
   }
 
@@ -1006,7 +1110,7 @@
   function statusClass(st) {
     if (st === "草稿") return "st-draft";
     if (st === "待审核") return "st-pending";
-    if (st === "待入库" || st === "待出库") return "st-wait";
+    if (st === "待出库") return "st-wait";
     if (st === "已审核") return "st-approved";
     if (st === "已入库" || st === "已出库" || st === "已退货" || st === "已盘点") return "st-executed";
     if (st === "部分出库") return "st-partial";
@@ -1474,8 +1578,6 @@
     const draftSo = db.sales.filter((p) => p.status === "草稿").length;
     const lows = lowStockList();
     const totalSku = db.products.filter((p) => p.active).length;
-    const donePo = db.purchases.filter((p) => p.status === "已入库").length;
-    const doneSo = db.sales.filter((p) => p.status === "已出库").length;
 
     const recent = [
       ...db.purchases.map((d) => ({ ...d, kind: "采购", party: supplierName(d.supplierId) })),
@@ -1486,15 +1588,14 @@
 
     return `
       <div class="welcome">
-        <div class="av">${isManager() ? "主管" : "文员"}</div>
+        <div class="av">文员</div>
         <div>
           <h2>您好，${esc(db.user.name)} · ${esc(db.user.role)}</h2>
           <p>公司：${esc(db.company)}　｜　今日：${fmtD(today)}<br/>
-          ${isManager()
-            ? "您可进行：单据审核、入库确认、出库发货、报表查看与导出。<br/>主管模式下可完成文员不能做的审核与库存操作。"
-            : "您可进行：基础资料维护、采购/销售单据录入（草稿或提交）、库存与单据查询、业务报表导出。<br/>您不能：财务审核、成本结转、凭证记账、红冲单据、收付款核销、直接调整库存。"}</p>
+          您可进行：基础资料维护、采购/销售单据录入（草稿或提交）、库存与单据查询、业务报表导出。<br/>
+          您不能：财务审核、成本结转、凭证记账、红冲单据、收付款核销、直接调整库存。</p>
         </div>
-        <div class="perm">${isManager() ? "主管权限说明<br/>单据审核：有权限<br/>入库/出库确认：有权限<br/>报表查看：有权限" : "权限说明<br/>账号类型：商务文员（基础业务）<br/>财务审核：无权限<br/>成本/凭证：无权限<br/>库存调整：无权限"}</div>
+        <div class="perm">权限说明<br/>账号类型：商务文员（基础业务）<br/>财务审核：无权限<br/>成本/凭证：无权限<br/>库存调整：无权限</div>
       </div>
 
       ${taskBannerHtml()}
@@ -1509,15 +1610,15 @@
           <div class="v">${pendingSo}</div>
           <div class="h">草稿另有 ${draftSo} 张</div>
         </div>
-        <div class="dash-card ok" style="cursor:pointer" data-nav="stock-query">
+        <div class="dash-card ${lows.length ? "warn" : "ok"}">
           <div class="k">库存预警 SKU</div>
           <div class="v">${lows.length}</div>
-          <div class="h">在售商品 ${totalSku} 种 · 点击查看</div>
+          <div class="h">在售商品 ${totalSku} 种</div>
         </div>
-        <div class="dash-card">
-          <div class="k">累计已完成单据</div>
-          <div class="v" style="color:var(--ink2)">${donePo + doneSo}</div>
-          <div class="h">入库 ${donePo} 笔 · 出库 ${doneSo} 笔</div>
+        <div class="dash-card ok">
+          <div class="k">本月操作提示</div>
+          <div class="v" style="font-size:14px;padding-top:6px">录入·查询·导出</div>
+          <div class="h">财务审核由主管账号完成</div>
         </div>
       </div>
       <div class="dash-2">
@@ -2082,12 +2183,7 @@
           ${timelineHtml(d.timeline)}
           ${
             d.status === "待审核"
-              ? `<div class="notice-warn">${isManager() ? "主管模式：可直接点击「主管审核」按钮审核此单据。" : "待主管审核。请切换到主管角色后审核。"}</div>`
-              : ""
-          }
-          ${
-            d.status === "待入库"
-              ? `<div class="notice-info">审核通过，请确认入库后更新库存。</div>`
+              ? `<div class="notice-warn">待财务审核。你可以点「模拟财务审核」看看无权限提示（文员真实环境不能审核）。</div>`
               : ""
           }
           <div class="sign-row">
@@ -2100,8 +2196,7 @@
         <div class="box-ft no-print">
           <button class="btn" data-act="close-view">返回列表</button>
           ${d.status === "草稿" ? `<button class="btn btn-primary" data-act="edit-po" data-id="${esc(d.id)}">编辑草稿</button>` : ""}
-          ${d.status === "待审核" ? `<button class="btn btn-primary" data-act="perm-approve">${isManager() ? "主管审核" : "模拟财务审核"}</button>` : ""}
-          ${d.status === "待入库" ? `<button class="btn btn-success" data-act="po-receive">确认入库</button>` : ""}
+          <button class="btn" data-act="perm-approve">模拟财务审核</button>
           <button class="btn" data-act="print-doc">打印</button>
         </div>
       </div>
@@ -2311,16 +2406,6 @@
           </div>
           <div style="margin-top:12px"><b>操作时间线</b></div>
           ${timelineHtml(d.timeline)}
-          ${
-            d.status === "待审核"
-              ? `<div class="notice-warn">${isManager() ? "主管模式：可直接点击「主管审核」按钮审核此单据。" : "待主管审核。请切换到主管角色后审核。"}</div>`
-              : ""
-          }
-          ${
-            d.status === "待出库"
-              ? `<div class="notice-info">审核通过，请确认出库后扣减库存。</div>`
-              : ""
-          }
           <div class="sign-row">
             <div>制单人：____________</div>
             <div>审核人：____________</div>
@@ -2331,8 +2416,7 @@
         <div class="box-ft no-print">
           <button class="btn" data-act="close-view">返回列表</button>
           ${d.status === "草稿" ? `<button class="btn btn-primary" data-act="edit-so" data-id="${esc(d.id)}">编辑草稿</button>` : ""}
-          ${d.status === "待审核" ? `<button class="btn btn-primary" data-act="perm-approve">${isManager() ? "主管审核" : "模拟财务审核"}</button>` : ""}
-          ${d.status === "待出库" ? `<button class="btn btn-success" data-act="so-ship">确认出库</button>` : ""}
+          <button class="btn" data-act="perm-writeoff">收款核销</button>
           <button class="btn" data-act="print-doc">打印</button>
         </div>
       </div>
@@ -3841,7 +3925,7 @@
         </div>
         <div class="tour-bd">
           <div class="tour-step">${esc(s.title)}</div>
-          <div>${esc(s.text)}</div>
+          <div class="tour-text">${esc(s.text).replace(/\n/g, "<br>")}</div>
         </div>
         <div class="tour-actions">
           <button class="btn" data-act="tour-prev" ${i === 0 ? "disabled" : ""}>上一步</button>
@@ -3890,9 +3974,7 @@
         <div class="logo">婆</div>
         <div class="name">管家婆辉煌版 · 网页实训后台</div>
         <div class="co">${esc(db.company)}</div>
-        <div class="user">登录：<b>${esc(db.user.name)}</b>（${esc(db.user.role)}）　|　账套：2026演示
-          <button class="role-toggle ${isManager() ? "on" : ""}" data-act="toggle-role">${isManager() ? "切回文员" : "切换主管"}</button>
-        </div>
+        <div class="user">登录：<b>${esc(db.user.name)}</b>（${esc(db.user.role)}）　|　账套：2026演示</div>
       </div>
       <div class="menubar">
         ${MENUS.map(
@@ -3909,7 +3991,7 @@
           .join("")}
         <span class="sep"></span>
         <button class="sb" data-nav="home">返回工作台</button>
-        <span class="home-hint">${isManager() ? "主管权限：审核单据 / 入库确认 / 出库发货 / 报表查看" : "文员权限：录入 / 查询 / 导出　｜　无财务审核·成本·凭证权限"}</span>
+        <span class="home-hint">文员权限：录入 / 查询 / 导出　｜　无财务审核·成本·凭证权限</span>
       </div>
       <div class="shell">
         <aside class="side">
@@ -4254,120 +4336,9 @@
         exportCSV("采购单列表.csv", ["单号", "供应商", "日期", "数量", "金额", "状态", "制单人"], rows);
         break;
       }
-      case "toggle-role":
-        toggleRole();
-        break;
-
       case "perm-approve":
-        if (!isManager()) {
-          noPermission("审核采购/销售单据、单据生效、红冲单据");
-          break;
-        }
-        // 主管执行审核
-        if (state.viewDoc) {
-          const { kind, doc } = state.viewDoc;
-          if (doc.status !== "待审核") {
-            alertBox("warn", "系统提示", "只有待审核状态的单据才能审核", "当前状态：" + doc.status);
-            break;
-          }
-          if (kind === "po") {
-            // 采购单审核 → 待入库
-            const idx = db.purchases.findIndex((x) => x.id === doc.id);
-            if (idx >= 0) {
-              db.purchases[idx].status = "待入库";
-              db.purchases[idx].timeline.push({ act: "主管审核通过", who: db.user.name, at: Date.now() });
-              state.viewDoc.doc = db.purchases[idx];
-            }
-            logAction("审核采购单", doc.no + " → 待入库");
-            alertBox("ok", "审核通过", "采购单已审核", "单号：" + doc.no + "　状态：待入库　请确认入库后更新库存。");
-          } else if (kind === "so") {
-            // 销售单审核 → 待出库
-            const idx = db.sales.findIndex((x) => x.id === doc.id);
-            if (idx >= 0) {
-              db.sales[idx].status = "待出库";
-              db.sales[idx].timeline.push({ act: "主管审核通过", who: db.user.name, at: Date.now() });
-              state.viewDoc.doc = db.sales[idx];
-            }
-            logAction("审核销售单", doc.no + " → 待出库");
-            alertBox("ok", "审核通过", "销售单已审核", "单号：" + doc.no + "　状态：待出库　请确认出库后扣减库存。");
-          }
-          save();
-          render();
-        }
+        noPermission("审核采购/销售单据、单据生效、红冲单据");
         break;
-
-      // 采购入库确认
-      case "po-receive": {
-        if (!state.viewDoc || state.viewDoc.kind !== "po") break;
-        const doc = state.viewDoc.doc;
-        if (doc.status !== "待入库") break;
-        // 更新库存
-        doc.lines.forEach((l) => {
-          db.stock[l.productId] = (db.stock[l.productId] || 0) + l.qty;
-        });
-        // 记录出入库流水
-        doc.lines.forEach((l) => {
-          db.moves.unshift({
-            id: uid("MV"), productId: l.productId, kind: "采购入库",
-            qty: l.qty, date: doc.date, refNo: doc.no, at: Date.now(),
-          });
-        });
-        // 更新单据状态
-        const idx = db.purchases.findIndex((x) => x.id === doc.id);
-        if (idx >= 0) {
-          db.purchases[idx].status = "已入库";
-          db.purchases[idx].timeline.push({ act: "确认入库", who: db.user.name, at: Date.now() });
-          state.viewDoc.doc = db.purchases[idx];
-        }
-        logAction("采购入库", doc.no + "　入库" + doc.lines.reduce((s,l)=>s+l.qty,0) + "件");
-        alertBox("ok", "入库成功", "采购单已入库", "单号：" + doc.no + "　库存已更新。");
-        save();
-        render();
-        break;
-      }
-
-      // 销售出库确认
-      case "so-ship": {
-        if (!state.viewDoc || state.viewDoc.kind !== "so") break;
-        const doc = state.viewDoc.doc;
-        if (doc.status !== "待出库") break;
-        // 检查库存是否充足
-        let insufficient = [];
-        doc.lines.forEach((l) => {
-          const stock = db.stock[l.productId] || 0;
-          if (stock < l.qty) {
-            const p = productById(l.productId);
-            insufficient.push((p?.name || l.productId) + "（需" + l.qty + "，现" + stock + "）");
-          }
-        });
-        if (insufficient.length > 0) {
-          alertBox("err", "库存不足", "以下商品库存不足，无法出库", insufficient.join("\n"));
-          break;
-        }
-        // 扣减库存
-        doc.lines.forEach((l) => {
-          db.stock[l.productId] = (db.stock[l.productId] || 0) - l.qty;
-        });
-        // 记录出入库流水
-        doc.lines.forEach((l) => {
-          db.moves.unshift({
-            id: uid("MV"), productId: l.productId, kind: "销售出库",
-            qty: -l.qty, date: doc.date, refNo: doc.no, at: Date.now(),
-          });
-        });
-        // 更新单据状态
-        const idx = db.sales.findIndex((x) => x.id === doc.id);
-        if (idx >= 0) {
-          db.sales[idx].status = "已出库";
-          db.sales[idx].timeline.push({ act: "确认出库", who: db.user.name, at: Date.now() });
-          state.viewDoc.doc = db.sales[idx];
-        }
-        logAction("销售出库", doc.no + "　出库" + doc.lines.reduce((s,l)=>s+l.qty,0) + "件");
-        alertBox("ok", "出库成功", "销售单已出库", "单号：" + doc.no + "　库存已扣减。");
-        save();
-        render();
-        break;
-      }
 
       // 销售
       case "so-search": render(); break;
