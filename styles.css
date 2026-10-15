@@ -638,6 +638,100 @@ table { border-collapse: collapse; width: 100%; }
 }
 .tour .btn { height: 26px; padding: 0 12px; font-size: var(--fs-xs); }
 
+/* 操作手册 */
+.manual { font-size: 13.5px; line-height: 1.7; color: var(--ink2); }
+.manual h4 { margin: 18px 0 8px; color: var(--primary); font-size: 14px; }
+.manual h4:first-child { margin-top: 0; }
+.manual p { margin: 6px 0; }
+.manual b { color: var(--ink); }
+.m-step {
+  display: flex;
+  gap: 10px;
+  margin: 6px 0;
+  padding: 6px 10px;
+  background: var(--bg-soft, #f6f8fb);
+  border-radius: 6px;
+  white-space: pre-line;
+}
+.m-no {
+  flex: 0 0 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.m-tip {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: #e8f4fd;
+  border-left: 3px solid #1e88e5;
+  border-radius: 4px;
+  color: #1565c0;
+}
+.m-warn {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: #fff4e5;
+  border-left: 3px solid #ff9800;
+  border-radius: 4px;
+  color: #e65100;
+}
+.m-toc {
+  font-size: 13px;
+  padding: 8px 12px;
+  background: var(--bg-soft, #f6f8fb);
+  border-radius: 6px;
+}
+.m-toc a { color: var(--primary); text-decoration: none; margin: 0 2px; }
+.m-toc a:hover { text-decoration: underline; }
+
+/* 教程目标元素高亮：橙色脉冲框 + 左上角气泡 */
+.tour-focus {
+  position: relative;
+  animation: tourPulse 1.2s ease-in-out infinite;
+  border-radius: 6px;
+  z-index: 50;
+}
+@keyframes tourPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px #fff, 0 0 0 6px #ff6b35, 0 0 0 10px rgba(255, 107, 53, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 3px #fff, 0 0 0 10px #ff6b35, 0 0 0 16px rgba(255, 107, 53, 0.55);
+  }
+}
+.tour-focus::before {
+  content: "👆 点这里";
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ff6b35;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
+  z-index: 60;
+}
+.tour-focus::after {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #ff6b35;
+  z-index: 60;
+}
+
 /* 状态栏 */
 .statusbar {
   height: 28px;
