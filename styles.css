@@ -1084,12 +1084,37 @@ img, svg { max-width: 100%; }
   .statusbar .right { display: none; }
   .app-title { gap: 8px; padding: 0 10px; }
   .app-title .name { font-size: var(--fs-sm); }
+  .app-title .co, .app-title .user { display: none; }
+
+  /* 一级菜单横向滚动，不挤 */
+  .menubar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .menubar::-webkit-scrollbar { display: none; }
+  .menubar .mi { flex-shrink: 0; padding: 10px 14px; white-space: nowrap; }
+
+  /* 二级菜单横向滚动 */
+  .subbar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 0 10px;
+  }
+  .subbar::-webkit-scrollbar { display: none; }
+  .subbar .sb { flex-shrink: 0; white-space: nowrap; }
+  .subbar .home-hint { display: none; }
+
   .btn-row .btn { flex: 1; }
   .dlg { width: 100%; max-height: calc(100dvh - 20px); }
   .tour { right: 8px; top: 80px; width: calc(100vw - 16px); max-width: none; }
   .tbl { font-size: var(--fs-xs); }
   .tbl th, .tbl td { padding: 8px 8px; }
   .lines input, .lines select { height: 36px; }
+
+  /* 表格容器横向滚动 */
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
 
 /* 超窄手机（360px 及以下）：卡片化进一步紧凑 */
@@ -1127,6 +1152,11 @@ img, svg { max-width: 100%; }
 @media (min-width: 1200px) {
   /* 内容区居中限宽，超宽屏不拉伸 */
   .content { max-width: 1200px; margin: 0 auto; }
+
+  /* 去掉内容区居中限宽，整体shell居中 */
+  .content { max-width: 100%; margin: 0; }
+  .shell { max-width: 1320px; margin: 0 auto; }
+  .app-title, .menubar, .subbar { max-width: 1320px; margin-left: auto; margin-right: auto; }
 
   /* 卡片悬浮质感 */
   .box, .dash-card, .task-card {
