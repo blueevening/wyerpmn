@@ -2,12 +2,41 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1A56DB" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)" />
+  <meta name="color-scheme" content="light dark" />
   <title>管家婆辉煌版ERP · 文员实训后台 | 广西老街坊商贸</title>
   <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* 首屏骨架：避免 JS 到达后 DOM 重排跳变 */
+    #app.booting { display: flex; flex-direction: column; height: 100vh; background: #F5F6F8; }
+    #app.booting .sk-bar { height: 40px; background: #1A56DB; flex-shrink: 0; }
+    #app.booting .sk-menu { height: 36px; background: #fff; border-bottom: 1px solid #E5E7EB; flex-shrink: 0; }
+    #app.booting .sk-body { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    #app.booting .sk-line { height: 14px; border-radius: 4px; background: linear-gradient(90deg,#E5E7EB 0%,#F3F4F6 50%,#E5E7EB 100%); background-size: 200% 100%; animation: skp 1.2s linear infinite; }
+    #app.booting .sk-line.w60 { width: 60%; }
+    #app.booting .sk-line.w90 { width: 90%; }
+    #app.booting .sk-card { height: 120px; background: #fff; border: 1px solid #E5E7EB; border-radius: 6px; }
+    @keyframes skp { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+    @media (prefers-color-scheme: dark) {
+      #app.booting { background: #111418; }
+      #app.booting .sk-menu, #app.booting .sk-card { background: #1B1F26; border-color: #2A2F38; }
+      #app.booting .sk-line { background: linear-gradient(90deg,#2A2F38 0%,#333944 50%,#2A2F38 100%); background-size: 200% 100%; }
+    }
+  </style>
 </head>
 <body>
-  <div id="app"></div>
+  <div id="app" class="booting" aria-busy="true">
+    <div class="sk-bar"></div>
+    <div class="sk-menu"></div>
+    <div class="sk-body">
+      <div class="sk-line w60"></div>
+      <div class="sk-card"></div>
+      <div class="sk-line w90"></div>
+      <div class="sk-line"></div>
+    </div>
+  </div>
   <noscript>请启用 JavaScript 后使用本模拟系统。</noscript>
   <script src="app.js"></script>
 </body>

@@ -3,7 +3,48 @@
   "use strict";
 
   const KEY = "gjp-erp-clerk-v1";
+  const THEME_KEY = "gjp-erp-theme"; // light | dark | auto
   const today = new Date();
+
+  /* ---------- 主题：跟随系统 + 手动切换（独立于业务数据） ---------- */
+  function applyTheme() {
+    try {
+      if (typeof document === "undefined" || !document.documentElement) return;
+      const saved = localStorage.getItem(THEME_KEY) || "auto";
+      let mode = saved;
+      if (saved === "auto") {
+        const mq = (typeof window !== "undefined" && window.matchMedia)
+          ? window.matchMedia("(prefers-color-scheme: dark)").matches
+          : false;
+        mode = mq ? "dark" : "light";
+      }
+      const root = document.documentElement;
+      if (root) root.setAttribute("data-theme", mode);
+    } catch (e) { /* 测试环境无 DOM，忽略 */ }
+  }
+  function toggleTheme() {
+    let next = "dark";
+    try {
+      const cur = (typeof document !== "undefined" && document.documentElement)
+        ? document.documentElement.getAttribute("data-theme")
+        : "light";
+      const saved = localStorage.getItem(THEME_KEY) || "auto";
+      // 若当前是 auto，则按当前实际渲染色反向切；否则按 saved 反向
+      if (saved === "auto") next = (cur === "dark") ? "light" : "dark";
+      else next = (saved === "dark") ? "light" : "dark";
+      localStorage.setItem(THEME_KEY, next);
+    } catch (e) {}
+    applyTheme();
+    render();
+  }
+
+  /* 搜索输入防抖（仅前端 UI，不影响业务逻辑） */
+  const _debounceTimer = {};
+  function debounceRender(key, delay) {
+    if (typeof setTimeout !== "function") { render(); return; }
+    if (_debounceTimer[key]) clearTimeout(_debounceTimer[key]);
+    _debounceTimer[key] = setTimeout(() => { _debounceTimer[key] = null; render(); }, delay || 220);
+  }
   const fmtD = (d) =>
     d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   const fmtDT = (ts) => {
@@ -4179,6 +4220,7 @@
         <div class="logo">婆</div>
         <div class="name">管家婆辉煌版 · 网页实训后台</div>
         <div class="co">${esc(db.company)}</div>
+        <button class="theme-toggle" data-act="toggle-theme" title="切换深色/浅色模式" aria-label="切换主题">◐</button>
         <div class="user">登录：<b>${esc(db.user.name)}</b>（${esc(db.user.role)}）　|　账套：2026演示</div>
       </div>
       <div class="menubar">
@@ -4230,6 +4272,15 @@
       ${tourHtml()}
       ${modalHtml()}
     `;
+
+    /* 首屏骨架已被真实内容替换，移除 booting 标记 */
+    try {
+      const appEl = document.getElementById("app");
+      if (appEl) {
+        appEl.classList.remove("booting");
+        appEl.removeAttribute("aria-busy");
+      }
+    } catch (e) {}
 
     /* 教程高亮：给当前步 target 对应的元素加橙色脉冲框 */
     try {
@@ -4287,6 +4338,11 @@
     else if (id === "f-invTo") state.f.invTo = v;
     else if (id === "f-recType") { state.f.recType = v; state.f.recId = ""; if (e.type === "change") render(); return; }
     else if (id === "f-recId") state.f.recId = v;
+    // 关键字搜索框：input 事件防抖实时过滤（不影响 change 立即刷新）
+    if (e.type === "input" && id && /^f-\w+Q$/.test(id)) {
+      debounceRender("fsearch-" + id, 220);
+      return;
+    }
     // 商品表单
     else if (state.editProduct) {
       const f = state.editProduct;
@@ -4457,6 +4513,7 @@
     const id = el.dataset.id;
 
     switch (act) {
+      case "toggle-theme": toggleTheme(); break;
       case "close-modal":
       case "close-modal-bg":
         if (act === "close-modal-bg" && e.target !== el) break;
@@ -4917,6 +4974,7 @@
     if (db.tourOn && TOUR[db.tourStep || 0]) {
       state.route = TOUR[db.tourStep || 0].route;
     }
+    applyTheme();
     render();
   }
   if (document.readyState === "loading") {
