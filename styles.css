@@ -836,10 +836,13 @@ img, svg { max-width: 100%; }
   font-size: var(--fs-xs);
   color: var(--ink-4);
   flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
   /* iOS 底部 Home 指示条安全区 */
   padding-bottom: env(safe-area-inset-bottom);
   height: calc(28px + env(safe-area-inset-bottom));
 }
+.statusbar > * { flex-shrink: 0; }
 .statusbar .right { margin-left: auto; }
 
 .locked { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--ink-4); }
