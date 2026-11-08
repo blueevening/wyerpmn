@@ -4182,6 +4182,14 @@
 
   /* ---------- 整页渲染 ---------- */
   function render() {
+    try {
+      renderInner();
+    } catch (e) {
+      renderFallback(e);
+    }
+  }
+
+  function renderInner() {
     const menu = menuOf(state.route);
     const sides = SIDE[menu] || [];
     let body = "";
@@ -4298,6 +4306,26 @@
         }
       }, 0);
     } catch (e) { /* 测试环境无 setTimeout，忽略高亮 */ }
+  }
+
+  /* 渲染异常兜底：避免切换页面后白屏且无任何提示 */
+  function renderFallback(e) {
+    try {
+      console.error("[render] 渲染失败", e);
+      const app = document.getElementById("app");
+      if (!app) return;
+      const detail = esc(String((e && (e.stack || e.message)) || e));
+      const route = esc(String((state && state.route) || ""));
+      app.innerHTML =
+        '<div style="margin:24px;padding:20px;border:1px solid #e0a0a0;border-radius:8px;background:#fff5f5;color:#8a2b2b">' +
+        '<h3 style="margin:0 0 8px">页面渲染出错</h3>' +
+        '<p style="margin:0 0 12px">当前页面：' + route + '　数据未丢失，可返回工作台继续操作。</p>' +
+        '<pre style="max-height:240px;overflow:auto;padding:10px;background:#fff;border:1px solid #eecccc;border-radius:6px;font-size:12px;white-space:pre-wrap">' + detail + '</pre>' +
+        '<button class="btn" data-nav="home" style="margin-top:12px">返回工作台</button>' +
+        '</div>';
+    } catch (e2) {
+      /* 兜底自身失败时静默，避免二次抛出 */
+    }
   }
 
   /* ---------- 同步表单输入到 state ---------- */
