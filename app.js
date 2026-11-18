@@ -434,6 +434,9 @@
 
   function migrate(d) {
     if (!d || typeof d !== "object") return seed();
+    /* 旧账套沿用旧公司名（可能是真实企业名），迁移为虚构演示主体 */
+    const LEGACY_COMPANIES = ["广西老街坊商贸有限公司"];
+    if (LEGACY_COMPANIES.indexOf(d.company) !== -1) d.company = "南宁云岭商贸有限公司（虚构演示）";
     if (!d.products) d.products = [];
     if (!d.suppliers) d.suppliers = [];
     if (!d.customers) d.customers = [];
