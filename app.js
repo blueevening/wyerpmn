@@ -1,4 +1,4 @@
-/* 管家婆辉煌版ERP · 文员实训模拟 */
+/* 进销存单证实训沙盘 · 文员后台模拟（独立实现，非任何商业 ERP 官方产品） */
 (function () {
   "use strict";
 
@@ -125,7 +125,7 @@
     return fmtD(d);
   }
 
-  /* ---------- 种子数据：广西老街坊商贸 ---------- */
+  /* ---------- 种子数据：虚构演示账套 ---------- */
   function seed() {
     const products = [
       { id: "P001", code: "SP-001", name: "原味花生", spec: "500g/包", unit: "包", category: "农副食品", cost: 8.5, price: 12.8, minStock: 20, active: true },
@@ -424,7 +424,7 @@
       counters: { po: 3, so: 3, xsth: 1, cgth: 1, pdd: 1 },
       flags: { exportedInv: false, tasks: Object.assign({}, TASK_DEFAULT) },
       user: { name: "文员小陈", role: "商务文员" },
-      company: "广西老街坊商贸有限公司",
+      company: "南宁云岭商贸有限公司（虚构演示）",
       tourOn: true,
       tourStep: 0,
       tourDone: false,
@@ -2044,7 +2044,8 @@
           <h2>您好，${esc(db.user.name)} · ${esc(db.user.role)}</h2>
           <p>公司：${esc(db.company)}　｜　今日：${fmtD(today)}<br/>
           您可进行：基础资料维护、采购/销售单据录入（草稿或提交）、库存与单据查询、业务报表导出。<br/>
-          真实企业里您不能：财务审核、成本结转、凭证记账、红冲单据、收付款核销、直接调整库存。本页的「模拟财务/仓管」按钮仅用于单人跑通实训流程。</p>
+          真实企业里您不能：财务审核、成本结转、凭证记账、红冲单据、收付款核销、直接调整库存。本页的「模拟财务/仓管」按钮仅用于单人跑通实训流程。<br/>
+          <span class="sub">本页为独立实现的单据流程演练，非管家婆官方产品、与任我行软件无关联；单据、往来单位、商品与金额均为虚构演示数据，不代表任何真实企业。</span></p>
         </div>
         <div class="perm">权限说明<br/>账号类型：商务文员（基础业务）<br/>财务审核：无权限<br/>成本/凭证：无权限<br/>库存调整：无权限</div>
       </div>
@@ -3412,7 +3413,7 @@
               <div class="btn-row">
                 <button class="btn btn-primary" data-act="rpt-preview">预览</button>
                 <button class="btn" data-act="rpt-reset">重置</button>
-                <button class="btn btn-primary" data-act="rpt-export">导出Excel</button>
+                <button class="btn btn-primary" data-act="rpt-export">导出CSV</button>
               </div></div>
           </div>
         </div>
@@ -4013,7 +4014,7 @@
         ${step(2, "「报表类型」三选一：商品库存表 / 客户销售明细表 / 采购明细表。")}
         ${step(3, "选起始日期和截止日期。")}
         ${step(4, "点【预览】看下面表格。")}
-        ${step(5, "点【导出Excel】下载 CSV（用 Excel 打开）。")}
+        ${step(5, "点【导出CSV】下载 CSV 文件（Excel 可直接打开）。")}
         ${warn("底部那个【修改报表数据】按钮别点——文员没权限改原始数据。")}
 
         <h4>5.2 进销存汇总（实训 L6）</h4>
@@ -5264,8 +5265,8 @@
 
     document.getElementById("app").innerHTML = `
       <div class="app-title">
-        <div class="logo">婆</div>
-        <div class="name">管家婆辉煌版 · 网页实训后台</div>
+        <div class="logo">证</div>
+        <div class="name">进销存单证实训沙盘 · 文员后台</div>
         <div class="co">${esc(db.company)}</div>
         <button class="theme-toggle" data-act="toggle-theme" title="切换深色/浅色模式" aria-label="切换主题">◐</button>
         <div class="user">登录：<b>${esc(db.user.name)}</b>（${esc(db.user.role)}）　|　账套：2026演示</div>
@@ -5318,7 +5319,7 @@
             ${showBack ? `<button class="btn-back" data-nav="home">← 返回</button>` : ""}
             <div>
               <div class="page-title">${esc(pageTitle(state.route))}${state.formDirty && hasOpenForm() ? ' <span class="dirty-badge" title="表单有未保存修改">未保存</span>' : ""}</div>
-              <div class="page-crumb">管家婆辉煌版 / ${esc(MENUS.find((m) => m.id === menu)?.label || "")} / ${esc(pageTitle(state.route))}</div>
+              <div class="page-crumb">单证实训沙盘 / ${esc(MENUS.find((m) => m.id === menu)?.label || "")} / ${esc(pageTitle(state.route))}</div>
             </div>
           </div>
           ${body}
@@ -5328,7 +5329,7 @@
         <span>操作员：${esc(db.user.name)}</span>
         <span>公司：${esc(db.company)}</span>
         <span>日期：${fmtD(today)}</span>
-        <span class="right">快捷键：Ctrl+S 保存草稿 · / 聚焦搜索 · Esc 关弹窗/返回　｜　文员实训版 · 数据存本机浏览器</span>
+        <span class="right">快捷键：Ctrl+S 保存草稿 · / 聚焦搜索 · Esc 关弹窗/返回　｜　独立实现 · 非管家婆官方产品，与任我行软件无关联 · 往来单位与单据均为虚构演示 · 数据存本机浏览器</span>
       </div>
       ${tourHtml()}
       ${modalHtml()}

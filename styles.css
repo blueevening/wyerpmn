@@ -1,5 +1,5 @@
 /* =========================================================
-   管家婆辉煌版ERP · 文员实训后台 — 双端UI（移动+桌面）
+   进销存单证实训沙盘 · 文员后台 — 双端UI（移动+桌面）
    设计原则：专业克制 ERP 风 / 主色单一 / 按钮统一 / 深色适配
    ========================================================= */
 
@@ -1131,7 +1131,16 @@ img, svg { max-width: 100%; }
   .task-banner { flex-direction: column; align-items: flex-start; }
   .welcome { padding: 12px; gap: 10px; }
   .welcome .av { width: 38px; height: 38px; }
-  .statusbar { overflow: hidden; white-space: nowrap; }
+  /* 手机端状态栏改为可换行，避免公司名较长时把「日期」挤掉 */
+  .statusbar {
+    height: auto;
+    min-height: 34px;
+    flex-wrap: wrap;
+    white-space: normal;
+    padding: 5px 10px;
+    gap: 2px 12px;
+    line-height: 1.5;
+  }
   .statusbar .right { display: none; }
   .app-title { gap: 8px; padding: 0 10px; }
   .app-title .name { font-size: var(--fs-sm); }
