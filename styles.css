@@ -327,6 +327,17 @@ img, svg { max-width: 100%; }
   flex-shrink: 0;
 }
 .page-title { font-size: var(--fs-md); font-weight: 600; color: var(--ink); }
+.dirty-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--warning-soft, #fff4e5);
+  color: var(--warning, #b76a00);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  vertical-align: 2px;
+}
 .page-crumb { color: var(--ink-4); font-size: var(--fs-xs); margin-top: 2px; }
 .page-hd .spacer { flex: 1; }
 
@@ -468,6 +479,44 @@ img, svg { max-width: 100%; }
   max-width: 100%;
 }
 .tbl { font-size: var(--fs-sm); min-width: 640px; }
+.history-cards { display: none; }
+.list-cards { display: none; }
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 0 2px;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.pg-info { white-space: nowrap; }
+.list-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  padding: 12px;
+}
+.list-card + .list-card { margin-top: 8px; }
+.lc-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lc-hd .mono { font-size: var(--fs-sm); color: var(--ink); }
+.lc-main { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; font-weight: 600; color: var(--ink-2); }
+.lc-date { font-family: Consolas, "SF Mono", Menlo, monospace; font-weight: 400; color: var(--ink-4); font-size: var(--fs-xs); }
+.lc-meta { margin-top: 4px; font-size: var(--fs-xs); color: var(--ink-4); }
+.lc-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.lc-actions .link { font-size: var(--fs-sm); }
+.history-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  padding: 12px;
+}
+.history-card + .history-card { margin-top: 8px; }
+.hc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hc-time { font-family: Consolas, "SF Mono", Menlo, monospace; font-size: var(--fs-sm); color: var(--ink); }
+.hc-reason { margin-top: 4px; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-2); }
+.hc-meta { margin: 4px 0 10px; font-size: var(--fs-xs); color: var(--ink-4); }
+.history-card .btn { width: 100%; }
 .tbl th {
   background: var(--bar-2);
   color: var(--ink-2);
@@ -702,7 +751,9 @@ img, svg { max-width: 100%; }
   max-height: calc(100dvh - 140px);
 }
 .tour.mini { width: auto; box-shadow: var(--shadow); }
-.tour.mini .tour-bd, .tour.mini .tour-actions { display: none; }
+.tour.mini .tour-bd, .tour.mini .tour-actions, .tour.mini .tour-progress { display: none; }
+.tour-progress { height: 3px; background: var(--line); flex-shrink: 0; overflow: hidden; }
+.tour-progress span { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), var(--primary-2, var(--primary))); transition: width .2s ease; }
 .tour-hd {
   background: var(--primary-soft);
   color: var(--primary);
@@ -1109,12 +1160,28 @@ img, svg { max-width: 100%; }
   .btn-row .btn { flex: 1; }
   .dlg { width: 100%; max-height: calc(100dvh - 20px); }
   .tour { right: 8px; top: 80px; width: calc(100vw - 16px); max-width: none; }
+  /* 表单/详情底部操作栏吸附：手机上不用滚到底再找保存 */
+  .box-ft {
+    position: sticky;
+    bottom: 0;
+    z-index: 8;
+    flex-wrap: wrap;
+    background: var(--panel);
+    box-shadow: 0 -6px 16px rgba(0, 0, 0, .08);
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+  .box-ft .btn { flex: 1 1 auto; min-height: 40px; }
   .tbl { font-size: var(--fs-xs); }
   .tbl th, .tbl td { padding: 8px 8px; }
   .lines input, .lines select { height: 36px; }
 
   /* 表格容器横向滚动 */
   .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* 历史备份 / 采购销售列表：窄屏改卡片，操作按钮不再被横滚藏住 */
+  .history-table { display: none; }
+  .history-cards { display: block; }
+  .list-table { display: none; }
+  .list-cards { display: block; }
 }
 
 /* 超窄手机（360px 及以下）：卡片化进一步紧凑 */
@@ -1195,3 +1262,52 @@ img, svg { max-width: 100%; }
 .dash-grid > *:nth-child(2) { animation-delay: 0.05s; }
 .dash-grid > *:nth-child(3) { animation-delay: 0.1s; }
 .dash-grid > *:nth-child(4) { animation-delay: 0.15s; }
+
+/* ---------- 数据恢复条 / 侧栏分组 ---------- */
+.recover-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #fff4e5;
+  border-bottom: 1px solid #f0c48a;
+  color: #7a4a00;
+  font-size: 13px;
+}
+.recover-bar b { color: #b35c00; }
+.recover-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.side-sub {
+  margin: 12px 0 4px;
+  padding: 0 12px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink3);
+  text-transform: uppercase;
+}
+body.dark .recover-bar { background: #3a2a12; border-color: #6b4a1e; color: #ffd9a3; }
+body.dark .recover-bar b { color: #ffbe66; }
+
+/* 表头在打印时每页重复 */
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  thead { display: table-header-group; }
+  tr, td, th { page-break-inside: avoid; }
+  .tbl-wrap { overflow: visible !important; border: none !important; }
+}
+
+/* 操作列吸附右侧，窄屏横向滚动时仍可点 */
+.tbl td.btn-row {
+  position: sticky;
+  right: 0;
+  background: var(--panel, #fff);
+  box-shadow: -6px 0 8px -6px rgba(0, 0, 0, 0.18);
+  z-index: 1;
+}
+.tbl tbody tr:hover td.btn-row { background: var(--panel-2, #f8fafc); }
+@media (max-width: 720px) {
+  .tbl { font-size: 12px; }
+  .tbl th, .tbl td { padding: 6px 8px; }
+  .btn-row .link { margin-right: 6px; }
+}

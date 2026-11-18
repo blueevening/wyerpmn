@@ -94,7 +94,8 @@ ok(src.includes("logAction"), "operation logging");
 const raw = store["gjp-erp-clerk-v1"];
 ok(!!raw, "seed saved to localStorage");
 const db = JSON.parse(raw);
-ok(db.v === 2, "db v2");
+ok(db.v === 3, "db v3");
+ok(db.flags && db.flags.tasks && db.flags.tasks.baseProduct === false, "task flags initialized");
 ok(db.salesReturns.length >= 1, "seed salesReturns");
 ok(db.purchaseReturns.length >= 1, "seed purchaseReturns");
 ok(db.stockChecks.length >= 1, "seed stockChecks");
@@ -134,6 +135,18 @@ click({ "data-nav": "tasks" });
 ok(el.innerHTML.includes("L1") && el.innerHTML.includes("L6"), "tasks L1-L6");
 click({ "data-nav": "sys-logs" });
 ok(el.innerHTML.includes("操作日志") || el.innerHTML.includes("时间"), "logs page");
+
+// 教程完整度：23 步，且覆盖审核/入库/出库/退货/盘点/备份
+click({ "data-act": "tour-restart" });
+ok(el.innerHTML.includes("分步教程 1/23"), "tour 23 steps");
+ok(/第 19 步/.test(src) && /第 20 步/.test(src) && /第 21 步/.test(src), "tour covers stock/backup/report");
+ok(/beforeunload/.test(src) && /formDirty/.test(src) && /confirmLeaveForm/.test(src), "unsaved form guard");
+ok(/tour-progress/.test(src), "tour progress bar");
+ok(/totalQty/.test(src) && /totalAmt/.test(src), "purchase/sales list totals");
+const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
+ok(/\.box-ft\s*\{[^}]*position:\s*sticky/s.test(css), "mobile sticky form footer");
+ok(/validateBackupData/.test(src) && /导入失败，已回滚/.test(src), "backup validation and rollback");
+ok(/pageBackupHistory/.test(src) && /restore-snapshot/.test(src), "backup history page");
 
 // Ctrl+S on empty forms -> info modal (no throw)
 handlers["doc:keydown"]({ key: "s", ctrlKey: true, preventDefault: () => {}, target: { tagName: "BODY", blur: () => {} } });
